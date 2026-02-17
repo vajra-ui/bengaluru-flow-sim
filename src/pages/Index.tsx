@@ -18,7 +18,7 @@ const viewConfig = {
 function DashboardContent() {
   const [view, setView] = useState<ViewMode>('commuter');
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
-  const { zoneStats, tickCount } = useTraffic();
+  const { zoneStats, tickCount, trafficMode, setTrafficMode } = useTraffic();
 
   return (
     <div className="flex flex-col h-screen w-full bg-background overflow-hidden">
@@ -33,6 +33,25 @@ function DashboardContent() {
           <span className="text-[10px] font-mono text-muted-foreground">LIVE</span>
         </div>
         <div className="flex items-center gap-4">
+          {/* Traffic mode selector */}
+          <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
+            {(['light', 'moderate', 'realistic', 'heavy'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setTrafficMode(mode)}
+                className={`px-2 py-1 text-[9px] font-mono uppercase rounded transition-colors ${
+                  trafficMode === mode
+                    ? mode === 'heavy' ? 'bg-destructive/20 congestion-high'
+                    : mode === 'light' ? 'bg-success/20 congestion-low'
+                    : mode === 'moderate' ? 'bg-accent/20 congestion-medium'
+                    : 'bg-primary/20 text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {mode === 'heavy' ? '🔴' : mode === 'light' ? '🟢' : mode === 'moderate' ? '🟡' : '⚡'} {mode}
+              </button>
+            ))}
+          </div>
           <div className="text-[10px] font-mono text-muted-foreground">
             <span className="text-foreground">{zoneStats.totalVehicles.toLocaleString()}</span> vehicles ·{' '}
             <span className={zoneStats.avgCongestion > 0.6 ? 'congestion-high' : zoneStats.avgCongestion > 0.35 ? 'congestion-medium' : 'congestion-low'}>

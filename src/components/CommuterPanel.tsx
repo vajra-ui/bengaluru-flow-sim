@@ -1,24 +1,23 @@
-import { useTraffic } from '@/hooks/useTraffic';
+import { useTraffic, type CommuterNotification } from '@/hooks/useTraffic';
 import { segments } from '@/lib/bengaluru-roads';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useMemo } from 'react';
 import trafficScene from '@/assets/traffic-scene.png';
+import { X, Bell } from 'lucide-react';
 
-/** Visual road lane with car icons showing position */
+/** Visual road with car positions */
 function RoadView({ vehiclesAhead, userPosition, total }: { vehiclesAhead: number; userPosition: number; total: number }) {
   const maxCars = 12;
   const scale = total > maxCars ? maxCars / total : 1;
-  const ahead = Math.min(Math.round(vehiclesAhead * scale), maxCars - 1);
   const pos = Math.min(Math.round(userPosition * scale), maxCars - 1);
 
   const cars = [];
   for (let i = 0; i < Math.min(total, maxCars); i++) {
     const isYou = i === pos;
-    const isAhead = i < pos;
     cars.push(
       <motion.div
         key={i}
-        className={`relative flex flex-col items-center ${isYou ? 'z-10' : ''}`}
+        className="relative flex flex-col items-center"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: i * 0.04 }}
@@ -32,53 +31,65 @@ function RoadView({ vehiclesAhead, userPosition, total }: { vehiclesAhead: numbe
             YOU
           </motion.div>
         )}
-        <div className={`text-lg ${isYou ? '' : ''}`}>
-          {isYou ? '🚙' : isAhead ? '🚗' : '🚗'}
-        </div>
-        {isYou && (
-          <div className="text-[8px] font-mono text-primary font-bold">#{userPosition + 1}</div>
-        )}
+        <div className="text-lg">{isYou ? '🚙' : '🚗'}</div>
+        {isYou && <div className="text-[8px] font-mono text-primary font-bold">#{userPosition + 1}</div>}
       </motion.div>
     );
   }
 
   return (
-    <div className="relative rounded-lg overflow-hidden">
-      {/* Road background */}
-      <div className="bg-[hsl(220,15%,12%)] rounded-lg p-3 border border-border">
-        {/* Lane markings */}
-        <div className="flex items-center gap-2 py-1 border-t border-dashed border-muted-foreground/20 border-b">
-          <div className="text-[8px] font-mono text-muted-foreground/40 mr-1">◀</div>
-          <div className="flex items-center gap-3 flex-wrap justify-center flex-1 py-2">
-            {cars}
-          </div>
-          <div className="text-[8px] font-mono text-muted-foreground/40 ml-1">▶</div>
-        </div>
-        {total > maxCars && (
-          <div className="text-center text-[9px] font-mono text-muted-foreground mt-1">
-            +{total - maxCars} more vehicles on this road
-          </div>
-        )}
+    <div className="bg-[hsl(220,15%,12%)] rounded-lg p-3 border border-border">
+      <div className="flex items-center gap-2 py-1 border-t border-dashed border-muted-foreground/20 border-b">
+        <div className="text-[8px] font-mono text-muted-foreground/40">◀</div>
+        <div className="flex items-center gap-3 flex-wrap justify-center flex-1 py-2">{cars}</div>
+        <div className="text-[8px] font-mono text-muted-foreground/40">▶</div>
       </div>
+      {total > maxCars && (
+        <div className="text-center text-[9px] font-mono text-muted-foreground mt-1">+{total - maxCars} more vehicles</div>
+      )}
     </div>
   );
 }
 
-/** Big simple number */
 function BigNumber({ value, label, sublabel, color }: { value: string; label: string; sublabel?: string; color?: string }) {
   return (
     <div className="flex flex-col items-center text-center p-2">
-      <div className={`text-3xl font-bold font-mono ${color ?? 'text-primary'}`} style={{ textShadow: '0 0 12px hsl(185 80% 50% / 0.3)' }}>
-        {value}
-      </div>
+      <div className={`text-3xl font-bold font-mono ${color ?? 'text-primary'}`} style={{ textShadow: '0 0 12px hsl(185 80% 50% / 0.3)' }}>{value}</div>
       <div className="text-xs text-foreground font-medium mt-1">{label}</div>
       {sublabel && <div className="text-[10px] text-muted-foreground">{sublabel}</div>}
     </div>
   );
 }
 
+/** Notification banner */
+function NotificationBanner({ notification, onDismiss }: { notification: CommuterNotification; onDismiss: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -20, scale: 0.95 }}
+      className={`panel p-3 border-l-4 ${
+        notification.severity === 'danger' ? 'border-l-destructive bg-destructive/5' : 'border-l-accent bg-accent/5'
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        <Bell className={`w-4 h-4 mt-0.5 shrink-0 ${notification.severity === 'danger' ? 'text-destructive' : 'text-accent'}`} />
+        <div className="flex-1 min-w-0">
+          <div className="text-xs font-bold text-foreground">{notification.message}</div>
+          <div className="text-[9px] text-muted-foreground mt-0.5">
+            {new Date(notification.timestamp).toLocaleTimeString()}
+          </div>
+        </div>
+        <button onClick={onDismiss} className="p-1 rounded hover:bg-secondary transition-colors shrink-0">
+          <X className="w-3 h-3 text-muted-foreground" />
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function CommuterPanel() {
-  const { states, predictCongestion } = useTraffic();
+  const { states, predictCongestion, notifications, dismissNotification } = useTraffic();
 
   const nearestRoad = useMemo(() => {
     const sorted = [...segments]
@@ -103,11 +114,8 @@ export default function CommuterPanel() {
   const vehiclesAhead = state.queueLength;
   const userPosition = Math.max(1, Math.floor(state.queueLength * 0.65));
   const speed = Math.round(state.speedFactor * 65);
-
-  // Time to reach position #1 in minutes
   const timeToFront = Math.max(1, Math.round(userPosition / Math.max(2, state.outflowRate)));
   const timeLabel = timeToFront >= 60 ? `${Math.round(timeToFront / 60)}h ${timeToFront % 60}m` : `${timeToFront} min`;
-
   const congestionLevel = state.congestionLevel;
   const statusEmoji = congestionLevel > 0.7 ? '🔴' : congestionLevel > 0.4 ? '🟡' : '🟢';
   const statusText = congestionLevel > 0.7 ? 'Heavy Traffic' : congestionLevel > 0.4 ? 'Slow Moving' : 'Moving Well';
@@ -115,6 +123,13 @@ export default function CommuterPanel() {
 
   return (
     <div className="flex flex-col gap-3 p-3 h-full overflow-y-auto">
+      {/* Push Notifications */}
+      <AnimatePresence>
+        {notifications.slice(0, 3).map(notif => (
+          <NotificationBanner key={notif.id} notification={notif} onDismiss={() => dismissNotification(notif.id)} />
+        ))}
+      </AnimatePresence>
+
       {/* Traffic image */}
       <div className="relative rounded-lg overflow-hidden h-28 shrink-0">
         <img src={trafficScene} alt="Live traffic" className="w-full h-full object-cover" />
@@ -130,33 +145,25 @@ export default function CommuterPanel() {
         </div>
       </div>
 
-      {/* Visual road with cars */}
+      {/* Visual road */}
       <RoadView vehiclesAhead={vehiclesAhead} userPosition={userPosition} total={state.vehicleCount} />
 
-      {/* Key info — vehicles ahead + time to reach #1 */}
+      {/* Key numbers */}
       <div className="panel p-3">
         <div className="grid grid-cols-2 gap-2">
-          <BigNumber
-            value={`${vehiclesAhead}`}
-            label="Vehicles Ahead"
-            sublabel="in your lane"
-            color={vehiclesAhead > 50 ? 'congestion-high' : vehiclesAhead > 20 ? 'congestion-medium' : 'congestion-low'}
-          />
-          <BigNumber
-            value={timeLabel}
-            label="To Reach #1"
-            sublabel="estimated wait"
-            color={timeToFront > 10 ? 'congestion-high' : timeToFront > 4 ? 'congestion-medium' : 'congestion-low'}
-          />
+          <BigNumber value={`${vehiclesAhead}`} label="Vehicles Ahead" sublabel="in your lane"
+            color={vehiclesAhead > 50 ? 'congestion-high' : vehiclesAhead > 20 ? 'congestion-medium' : 'congestion-low'} />
+          <BigNumber value={timeLabel} label="To Reach #1" sublabel="estimated wait"
+            color={timeToFront > 10 ? 'congestion-high' : timeToFront > 4 ? 'congestion-medium' : 'congestion-low'} />
         </div>
       </div>
 
-      {/* Your position + speed */}
+      {/* Position, speed, congestion */}
       <div className="panel p-3">
         <div className="grid grid-cols-3 gap-2">
           <div className="text-center">
             <div className="text-xl font-bold font-mono text-primary">#{userPosition}</div>
-            <div className="text-[10px] text-muted-foreground">Your Position</div>
+            <div className="text-[10px] text-muted-foreground">Position</div>
           </div>
           <div className="text-center">
             <div className={`text-xl font-bold font-mono ${speed < 15 ? 'congestion-high' : speed < 35 ? 'congestion-medium' : 'congestion-low'}`}>{speed}</div>
@@ -164,28 +171,22 @@ export default function CommuterPanel() {
           </div>
           <div className="text-center">
             <div className={`text-xl font-bold font-mono ${statusColor}`}>{Math.round(congestionLevel * 100)}%</div>
-            <div className="text-[10px] text-muted-foreground">Congestion</div>
+            <div className="text-[10px] text-muted-foreground">Congested</div>
           </div>
         </div>
       </div>
 
-      {/* Simple trend */}
+      {/* Trend */}
       <div className="panel p-3 text-center">
         {state.trend === 'rising' ? (
-          <>
-            <div className="text-sm font-bold congestion-high">↑ Traffic Building Up</div>
-            <div className="text-[11px] text-muted-foreground mt-1">Wait time may increase. Try a faster route below.</div>
-          </>
+          <><div className="text-sm font-bold congestion-high">↑ Traffic Building Up</div>
+          <div className="text-[11px] text-muted-foreground mt-1">Wait time increasing. Try a faster route.</div></>
         ) : state.trend === 'falling' ? (
-          <>
-            <div className="text-sm font-bold congestion-low">↓ Traffic Clearing</div>
-            <div className="text-[11px] text-muted-foreground mt-1">You'll move faster soon. Hang tight!</div>
-          </>
+          <><div className="text-sm font-bold congestion-low">↓ Traffic Clearing</div>
+          <div className="text-[11px] text-muted-foreground mt-1">You'll move faster soon!</div></>
         ) : (
-          <>
-            <div className="text-sm font-bold text-foreground">→ Steady Flow</div>
-            <div className="text-[11px] text-muted-foreground mt-1">Traffic is holding at current pace.</div>
-          </>
+          <><div className="text-sm font-bold text-foreground">→ Steady Flow</div>
+          <div className="text-[11px] text-muted-foreground mt-1">Traffic holding at current pace.</div></>
         )}
       </div>
 
