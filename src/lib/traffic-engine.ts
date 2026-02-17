@@ -51,6 +51,20 @@ export class TrafficEngine {
   private states: Map<string, SegmentState> = new Map();
   private history: Map<string, number[]> = new Map(); // last 60 congestion values
   private tickCount = 0;
+  private mode: 'realistic' | 'heavy' | 'light' | 'moderate' = 'realistic';
+
+  setMode(mode: 'realistic' | 'heavy' | 'light' | 'moderate') {
+    this.mode = mode;
+  }
+
+  private getModeMultiplier(): number {
+    switch (this.mode) {
+      case 'heavy': return 1.8;
+      case 'light': return 0.3;
+      case 'moderate': return 0.7;
+      default: return 1.0;
+    }
+  }
 
   constructor() {
     // Initialize all segments
@@ -76,7 +90,7 @@ export class TrafficEngine {
 
   tick(): Map<string, SegmentState> {
     this.tickCount++;
-    const timeMult = getTimeMultiplier();
+    const timeMult = getTimeMultiplier() * this.getModeMultiplier();
     
     // Store previous for trend calculation
     const prevCongestions = new Map<string, number>();
