@@ -6,6 +6,7 @@ import OperatorPanel from '@/components/OperatorPanel';
 import AuthorityPanel from '@/components/AuthorityPanel';
 import { TrafficProvider, useTraffic } from '@/hooks/useTraffic';
 import { Activity, Eye, Radio, Shield } from 'lucide-react';
+import NanbaAssistant from '@/components/NanbaAssistant';
 
 type ViewMode = 'commuter' | 'operator' | 'authority';
 
@@ -112,8 +113,9 @@ function DashboardContent() {
               {view === 'authority' && <AuthorityPanel />}
             </motion.div>
           </AnimatePresence>
-        </div>
       </div>
+      <NanbaAssistant />
+    </div>
     </div>
   );
 }
