@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, X, Volume2 } from 'lucide-react';
 import { useTraffic } from '@/hooks/useTraffic';
 import { segments } from '@/lib/bengaluru-roads';
+import { getSegmentSafetyScore, getTransportModes, emergencyContacts, getRecentIncidents } from '@/lib/safety-engine';
 
 type AssistantState = 'idle' | 'listening' | 'processing' | 'speaking';
 
@@ -16,6 +17,10 @@ type Intent =
   | 'alternate_route'
   | 'movement'
   | 'prediction'
+  | 'safety'
+  | 'safe_route'
+  | 'emergency'
+  | 'transport'
   | 'general'
   | 'greeting';
 
@@ -37,6 +42,10 @@ function detectIntent(text: string): { intent: Intent; segmentHint?: string } {
   if (/spacing|space between|gap/.test(lower)) return { intent: 'spacing', segmentHint };
   if (/queue|queue length|how long is/.test(lower)) return { intent: 'queue', segmentHint };
   if (/first position|front|when will i move|reach.*front|time to/.test(lower)) return { intent: 'time_to_front', segmentHint };
+  if (/safe.*route|safest|women.*safe|safe.*travel/.test(lower)) return { intent: 'safe_route', segmentHint };
+  if (/safe|safety|risk|danger|secure|women/.test(lower)) return { intent: 'safety', segmentHint };
+  if (/emergency|sos|help|police|helpline/.test(lower)) return { intent: 'emergency', segmentHint };
+  if (/bus|metro|auto|transport|how.*go|which.*transport/.test(lower)) return { intent: 'transport', segmentHint };
   if (/alternate|alternative|other route|different road|bypass/.test(lower)) return { intent: 'alternate_route', segmentHint };
   if (/move|movement|will i move|probability/.test(lower)) return { intent: 'movement', segmentHint };
   if (/predict|forecast|future|will it clear|clearing/.test(lower)) return { intent: 'prediction', segmentHint };
@@ -228,8 +237,27 @@ export default function NanbaAssistant() {
         const pred = predictCongestion(segId);
         return `Nanba, based on current trends, the predicted congestion level for ${segName} is ${Math.round(pred.prediction * 100)}%. The risk level is ${pred.risk}. ${pred.risk === 'high' ? 'It might get worse before it gets better. Consider an alternate route.' : pred.risk === 'medium' ? 'Traffic should stabilize soon.' : 'Things are looking good ahead.'}`;
       }
+      case 'safety': {
+        const safety = getSegmentSafetyScore(segId);
+        return `Nanba, the safety score for ${segName} is ${safety.overall} out of 100, which is grade ${safety.grade}, meaning ${safety.label}. Lighting is at ${Math.round(safety.factors.lighting * 100)} percent, police presence is ${Math.round(safety.factors.policePresence * 100)} percent, and CCTV coverage is ${Math.round(safety.factors.cctvCoverage * 100)} percent. ${safety.overall < 50 ? 'I recommend extra caution on this route. Consider sharing your live location with a trusted contact.' : 'This route has reasonable safety levels.'}`;
+      }
+      case 'safe_route': {
+        const safety = getSegmentSafetyScore(segId);
+        const allSegs = segments.map(s => ({ s, score: getSegmentSafetyScore(s.id) })).sort((a, b) => b.score.overall - a.score.overall);
+        const safest = allSegs[0];
+        return `Nanba, your current route ${segName} has a safety score of ${safety.overall}. The safest route in the city right now is ${safest.s.name} with a score of ${safest.score.overall}. I always recommend choosing well-lit routes with police presence over shorter alternatives. You can check the Safety tab for detailed route comparisons.`;
+      }
+      case 'emergency': {
+        return `Nanba, I'm here for you. For emergencies, dial the Women's Helpline at 181, or Police at 100. The Bengaluru City Police can be reached at 080-22942222. You can also use the SOS button in the Safety tab to share your live location with emergency contacts immediately. Stay calm, I am with you.`;
+      }
+      case 'transport': {
+        const modes = getTransportModes(segId);
+        const safest = modes[0];
+        const modeList = modes.map(m => `${m.name} with safety score ${m.safetyScore}`).join(', ');
+        return `Nanba, for ${segName}, the available transport options ranked by safety are: ${modeList}. I recommend ${safest?.name ?? 'metro'} as the safest option. ${safest?.note ?? ''}`;
+      }
       default:
-        return `Nanba, I can help you with traffic information. Try asking about your location, traffic density, queue length, estimated time to move, or alternate routes. I'm here for you!`;
+        return `Nanba, I can help you with traffic information and safety guidance. Try asking about your location, traffic density, safety score, safest route, transport options, or emergency contacts. I'm here for you!`;
     }
   }, [states, userSegment, predictCongestion]);
 
@@ -415,7 +443,7 @@ export default function NanbaAssistant() {
 
             {/* Quick actions */}
             <div className="px-3 sm:px-4 py-2 border-t border-border/50 flex flex-wrap gap-1.5">
-              {['Where am I?', 'Traffic density?', 'Time to front?', 'Alternate route?'].map(q => (
+              {['Where am I?', 'Traffic density?', 'Safety score?', 'Safest route?', 'Emergency help', 'Transport options?'].map(q => (
                 <button
                   key={q}
                   onClick={() => {
