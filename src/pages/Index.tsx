@@ -4,17 +4,19 @@ import TrafficMap from '@/components/TrafficMap';
 import CommuterPanel from '@/components/CommuterPanel';
 import OperatorPanel from '@/components/OperatorPanel';
 import AuthorityPanel from '@/components/AuthorityPanel';
+import SafetyPanel from '@/components/SafetyPanel';
 import { TrafficProvider, useTraffic } from '@/hooks/useTraffic';
-import { Activity, Eye, Radio, Shield, Menu, X } from 'lucide-react';
+import { Activity, Eye, Radio, Shield, Heart, Menu, X } from 'lucide-react';
 import NanbaAssistant from '@/components/NanbaAssistant';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-type ViewMode = 'commuter' | 'operator' | 'authority';
+type ViewMode = 'commuter' | 'operator' | 'authority' | 'safety';
 
 const viewConfig = {
   commuter: { label: 'Commuter', icon: Eye, description: 'Your Route Intelligence' },
   operator: { label: 'Operator', icon: Radio, description: 'Sensor Network Monitor' },
   authority: { label: 'Authority', icon: Shield, description: 'Traffic Command Center' },
+  safety: { label: 'Safety', icon: Heart, description: 'Women Safety Navigation' },
 } as const;
 
 function DashboardContent() {
@@ -130,6 +132,7 @@ function DashboardContent() {
                 {view === 'commuter' && <CommuterPanel />}
                 {view === 'operator' && <OperatorPanel />}
                 {view === 'authority' && <AuthorityPanel />}
+                {view === 'safety' && <SafetyPanel />}
               </motion.div>
             )}
           </AnimatePresence>
@@ -147,6 +150,7 @@ function DashboardContent() {
                 {view === 'commuter' && <CommuterPanel />}
                 {view === 'operator' && <OperatorPanel />}
                 {view === 'authority' && <AuthorityPanel />}
+                {view === 'safety' && <SafetyPanel />}
               </motion.div>
             </AnimatePresence>
           </div>
