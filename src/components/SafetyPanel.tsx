@@ -10,6 +10,7 @@ import {
   Camera,
   Clock,
   Siren,
+  MapPin,
 } from 'lucide-react';
 import { segments, nodes } from '@/lib/bengaluru-roads';
 import { useTraffic } from '@/hooks/useTraffic';
@@ -21,7 +22,6 @@ import {
   getTransportModes,
   findSafestRoute,
   emergencyContacts,
-  safetyColor,
   type CrowdRating,
   type TransportMode,
 } from '@/lib/safety-engine';
@@ -57,9 +57,7 @@ function TransportBadge({ mode }: { mode: TransportMode }) {
     <div className="panel p-2.5">
       <div className="flex items-center gap-2">
         <span>{icons[mode.type]}</span>
-        <div className="flex-1 text-[11px] font-bold">
-          {mode.name}
-        </div>
+        <div className="flex-1 text-[11px] font-bold">{mode.name}</div>
         <div className="text-xs font-mono">{mode.safetyScore}</div>
       </div>
     </div>
@@ -84,44 +82,25 @@ export default function SafetyPanel() {
 
   /* ───────────── DATA ───────────── */
 
-  const allScores = useMemo(() => getAllSafetyScores(), []);
   const currentScore = useMemo(
     () => getSegmentSafetyScore(selectedSeg),
     [selectedSeg]
   );
+
   const incidents = useMemo(() => getRecentIncidents(), []);
-  const ratings = useMemo(
-    () => [...userRatings, ...getMockRatings()],
-    [userRatings]
-  );
+
   const transportModes = useMemo(
     () => getTransportModes(selectedSeg),
     [selectedSeg]
   );
-  const safeRoutes = useMemo(
+
+  // ⭐ SAFEST ROUTE CALCULATION
+  const safeRoute = useMemo(
     () => findSafestRoute(fromNode, toNode),
     [fromNode, toNode]
   );
 
   /* ───────────── ACTIONS ───────────── */
-
-  const submitRating = useCallback(() => {
-    if (!newRating) return;
-
-    const r: CrowdRating = {
-      id: `user-${Date.now()}`,
-      segmentId: selectedSeg,
-      userId: 'current-user',
-      rating: newRating,
-      comment: newComment || 'No comment',
-      timestamp: Date.now(),
-      tags: newRating >= 4 ? ['feels-safe'] : ['caution'],
-    };
-
-    setUserRatings(prev => [r, ...prev]);
-    setNewRating(0);
-    setNewComment('');
-  }, [newRating, newComment, selectedSeg]);
 
   const reportIncident = useCallback(() => {
     addSafetyReport({
@@ -172,7 +151,7 @@ export default function SafetyPanel() {
       {/* BODY */}
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
         <AnimatePresence mode="wait">
-          {/* OVERVIEW */}
+          {/* ───────── OVERVIEW ───────── */}
           {tab === 'overview' && (
             <motion.div key="overview">
               <div className="panel p-4">
@@ -219,16 +198,79 @@ export default function SafetyPanel() {
             </motion.div>
           )}
 
-          {/* INCIDENTS */}
+          {/* ───────── ROUTES (NEW) ───────── */}
+          {tab === 'route' && (
+            <motion.div key="route" className="flex flex-col gap-3">
+              <div className="panel p-3">
+                <div className="text-xs font-bold mb-2">
+                  🗺️ Find Safest Route
+                </div>
+
+                {/* FROM */}
+                <label className="text-[10px] text-muted-foreground">
+                  From
+                </label>
+                <select
+                  value={fromNode}
+                  onChange={e => setFromNode(e.target.value)}
+                  className="w-full text-xs bg-secondary rounded px-2 py-1.5 mb-2"
+                >
+                  {nodes.map(n => (
+                    <option key={n.id} value={n.id}>
+                      {n.name}
+                    </option>
+                  ))}
+                </select>
+
+                {/* TO */}
+                <label className="text-[10px] text-muted-foreground">
+                  To
+                </label>
+                <select
+                  value={toNode}
+                  onChange={e => setToNode(e.target.value)}
+                  className="w-full text-xs bg-secondary rounded px-2 py-1.5"
+                >
+                  {nodes.map(n => (
+                    <option key={n.id} value={n.id}>
+                      {n.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* RESULT */}
+              {safeRoute && (
+                <div className="panel p-3">
+                  <div className="flex items-center gap-3 mb-2">
+                    <SafetyGauge score={safeRoute.safetyScore} />
+                    <div>
+                      <div className="text-xs text-muted-foreground">
+                        Safest Route Score
+                      </div>
+                      <div className="text-sm font-bold">
+                        {safeRoute.safetyScore}/100
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] font-bold mb-1">
+                    📍 Route Path
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {safeRoute.path?.join(' → ') || 'No path found'}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* ───────── INCIDENTS ───────── */}
           {tab === 'incidents' && (
             <motion.div key="incidents">
               <div className="panel p-3 bg-destructive/5 border-destructive/20">
                 <div className="text-xs font-bold text-destructive mb-2">
                   📢 Report an Incident
-                </div>
-
-                <div className="text-[10px] text-muted-foreground mb-2">
-                  Your reports help keep other women safe.
                 </div>
 
                 <button
@@ -245,7 +287,7 @@ export default function SafetyPanel() {
             </motion.div>
           )}
 
-          {/* EMERGENCY */}
+          {/* ───────── EMERGENCY ───────── */}
           {tab === 'emergency' && (
             <motion.div key="emergency">
               <motion.button
