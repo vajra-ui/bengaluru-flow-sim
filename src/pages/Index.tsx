@@ -109,7 +109,7 @@ function DashboardContent() {
       <div className="flex flex-1 min-h-0 relative">
         {/* Map */}
         <div className="flex-1 relative">
-          <TrafficMap onSegmentClick={setSelectedSegment} />
+          <TrafficMap onSegmentClick={setSelectedSegment} viewMode={view} />
         </div>
 
         {/* Side panel - responsive: overlay on mobile, sidebar on desktop */}

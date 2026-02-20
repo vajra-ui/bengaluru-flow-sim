@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { segments } from '@/lib/bengaluru-roads';
 import { useTraffic } from '@/hooks/useTraffic';
+import { getAllSafetyScores, safetyColor } from '@/lib/safety-engine';
 
 function congestionColor(level: number): string {
   if (level < 0.3) return '#22c55e';
@@ -15,14 +16,17 @@ function congestionColor(level: number): string {
 interface TrafficMapProps {
   onSegmentClick?: (id: string) => void;
   className?: string;
+  viewMode?: string;
 }
 
-export default function TrafficMap({ onSegmentClick, className }: TrafficMapProps) {
+export default function TrafficMap({ onSegmentClick, className, viewMode }: TrafficMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const polylinesRef = useRef<Map<string, L.Polyline>>(new Map());
   const glowLinesRef = useRef<Map<string, L.Polyline>>(new Map());
   const { states } = useTraffic();
+
+  const isSafetyView = viewMode === 'safety';
 
   // Initialize map once
   useEffect(() => {
@@ -44,7 +48,7 @@ export default function TrafficMap({ onSegmentClick, className }: TrafficMapProp
     // Create initial polylines for each segment
     for (const seg of segments) {
       const positions = seg.path.map(p => [p[0], p[1]] as L.LatLngExpression);
-      
+
       // Glow layer
       const glow = L.polyline(positions, {
         color: '#22c55e',
@@ -78,42 +82,97 @@ export default function TrafficMap({ onSegmentClick, className }: TrafficMapProp
     };
   }, []);
 
-  // Update polyline styles on state change
+  // Update polyline styles — switches between congestion and safety heatmap
   useEffect(() => {
+    const safetyScores = isSafetyView ? getAllSafetyScores() : null;
+
     for (const seg of segments) {
-      const state = states.get(seg.id);
-      const congestion = state?.congestionLevel ?? 0;
-      const color = congestionColor(congestion);
-      const weight = 3 + congestion * 6;
-
       const line = polylinesRef.current.get(seg.id);
-      if (line) {
-        line.setStyle({ color, weight, opacity: 0.7 + congestion * 0.3 });
-        line.setTooltipContent(
-          `<div style="font-family:monospace;font-size:11px;padding:4px">
-            <b>${seg.name}</b><br/>
-            Congestion: ${Math.round(congestion * 100)}%<br/>
-            Vehicles: ${state?.vehicleCount ?? 0}<br/>
-            Speed: ${Math.round((state?.speedFactor ?? 1) * 65)} km/h
-          </div>`
-        );
-      }
-
       const glow = glowLinesRef.current.get(seg.id);
-      if (glow) {
-        glow.setStyle({
-          color,
-          weight: weight + 8,
-          opacity: congestion > 0.4 ? 0.15 : 0,
-        });
+
+      if (isSafetyView && safetyScores) {
+        // ── Safety heatmap mode ──
+        const safety = safetyScores.get(seg.id);
+        const score = safety?.overall ?? 50;
+        const color = safetyColor(score);
+        // Thicker lines for more dangerous roads to draw attention
+        const weight = 3 + (1 - score / 100) * 5;
+
+        if (line) {
+          line.setStyle({ color, weight, opacity: 0.85 });
+          line.setTooltipContent(
+            `<div style="font-family:monospace;font-size:11px;padding:4px">
+              <b>${seg.name}</b><br/>
+              Safety Score: <b>${score}/100</b><br/>
+              Grade: ${safety?.grade ?? 'N/A'} — ${safety?.label ?? ''}<br/>
+              Risk Index: ${safety ? Math.round(safety.riskIndex * 100) : 0}%
+            </div>`
+          );
+        }
+
+        if (glow) {
+          // Glow more intensely for dangerous roads
+          const glowOpacity = score < 50 ? 0.25 : score < 65 ? 0.12 : 0;
+          glow.setStyle({
+            color,
+            weight: weight + 10,
+            opacity: glowOpacity,
+          });
+        }
+      } else {
+        // ── Traffic congestion mode ──
+        const state = states.get(seg.id);
+        const congestion = state?.congestionLevel ?? 0;
+        const color = congestionColor(congestion);
+        const weight = 3 + congestion * 6;
+
+        if (line) {
+          line.setStyle({ color, weight, opacity: 0.7 + congestion * 0.3 });
+          line.setTooltipContent(
+            `<div style="font-family:monospace;font-size:11px;padding:4px">
+              <b>${seg.name}</b><br/>
+              Congestion: ${Math.round(congestion * 100)}%<br/>
+              Vehicles: ${state?.vehicleCount ?? 0}<br/>
+              Speed: ${Math.round((state?.speedFactor ?? 1) * 65)} km/h
+            </div>`
+          );
+        }
+
+        if (glow) {
+          glow.setStyle({
+            color,
+            weight: weight + 8,
+            opacity: congestion > 0.4 ? 0.15 : 0,
+          });
+        }
       }
     }
-  }, [states]);
+  }, [states, isSafetyView]);
 
   return (
     <div className={`relative w-full h-full ${className ?? ''}`}>
       <div ref={containerRef} className="w-full h-full" style={{ background: '#0a0e1a' }} />
       <div className="scan-line" />
+
+      {/* Safety heatmap legend */}
+      {isSafetyView && (
+        <div className="absolute bottom-4 left-4 z-[1000] bg-card/90 backdrop-blur-sm border border-border rounded-lg px-3 py-2 font-mono text-[10px]">
+          <div className="text-muted-foreground mb-1.5 uppercase tracking-wider text-[9px]">Safety Heatmap</div>
+          {[
+            { color: '#22c55e', label: 'Very Safe (80–100)' },
+            { color: '#84cc16', label: 'Safe (65–79)' },
+            { color: '#eab308', label: 'Moderate (50–64)' },
+            { color: '#f97316', label: 'Caution (35–49)' },
+            { color: '#ef4444', label: 'Unsafe (0–34)' },
+          ].map(({ color, label }) => (
+            <div key={label} className="flex items-center gap-2 mb-0.5">
+              <div className="w-6 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+              <span className="text-muted-foreground">{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Custom tooltip styles */}
       <style>{`
         .traffic-tooltip {
