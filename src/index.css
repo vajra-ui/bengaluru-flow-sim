@@ -1,0 +1,179 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ================================================= */
+/* 🔥 CRITICAL: WEBVIEW + MOBILE FOUNDATION */
+/* ================================================= */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: 'Inter', sans-serif;
+}
+
+/* ✅ Safe area (iPhone notch support) */
+.safe-area {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ================================================= */
+/* 🎨 THEME VARIABLES */
+/* ================================================= */
+
+@layer base {
+  :root {
+    --background: 220 20% 6%;
+    --foreground: 190 80% 90%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 190 60% 85%;
+
+    --popover: 220 18% 10%;
+    --popover-foreground: 190 60% 85%;
+
+    --primary: 185 80% 50%;
+    --primary-foreground: 220 20% 6%;
+
+    --secondary: 220 15% 16%;
+    --secondary-foreground: 190 40% 75%;
+
+    --muted: 220 15% 14%;
+    --muted-foreground: 210 15% 50%;
+
+    --accent: 38 90% 55%;
+    --accent-foreground: 220 20% 6%;
+
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 150 70% 45%;
+    --success-foreground: 220 20% 6%;
+
+    --border: 210 20% 18%;
+    --input: 210 20% 18%;
+    --ring: 185 80% 50%;
+
+    --radius: 0.5rem;
+
+    --glow-primary: 0 0 20px hsl(185 80% 50% / 0.3);
+    --glow-accent: 0 0 20px hsl(38 90% 55% / 0.3);
+    --glow-destructive: 0 0 20px hsl(0 75% 55% / 0.3);
+    --glow-success: 0 0 20px hsl(150 70% 45% / 0.3);
+
+    --sidebar-background: 220 18% 8%;
+    --sidebar-foreground: 190 40% 75%;
+    --sidebar-primary: 185 80% 50%;
+    --sidebar-primary-foreground: 220 20% 6%;
+    --sidebar-accent: 220 15% 16%;
+    --sidebar-accent-foreground: 190 40% 75%;
+    --sidebar-border: 210 20% 18%;
+    --sidebar-ring: 185 80% 50%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* ================================================= */
+/* 🧩 COMPONENT STYLES */
+/* ================================================= */
+
+@layer components {
+  .glow-border {
+    @apply border border-primary/30;
+    box-shadow: var(--glow-primary);
+  }
+
+  .glow-text {
+    text-shadow: 0 0 10px hsl(185 80% 50% / 0.5);
+  }
+
+  .panel {
+    @apply bg-card/80 backdrop-blur-md border border-border rounded-lg;
+  }
+
+  .panel-header {
+    @apply px-4 py-2 border-b border-border flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-muted-foreground;
+  }
+
+  .metric-value {
+    @apply font-mono text-2xl font-bold text-primary glow-text;
+  }
+
+  .metric-label {
+    @apply font-mono text-[10px] uppercase tracking-widest text-muted-foreground;
+  }
+
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-dot-live {
+    @apply status-dot bg-success;
+    box-shadow: var(--glow-success);
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .scan-line {
+    @apply absolute inset-0 pointer-events-none overflow-hidden;
+  }
+
+  .scan-line::after {
+    content: '';
+    @apply absolute left-0 right-0 h-px bg-primary/20;
+    animation: scan 4s linear infinite;
+  }
+
+  .data-grid {
+    @apply grid gap-1 font-mono text-xs;
+  }
+
+  .congestion-low { @apply text-success; }
+  .congestion-medium { @apply text-accent; }
+  .congestion-high { @apply text-destructive; }
+}
+
+/* ================================================= */
+/* 🎞️ ANIMATIONS */
+/* ================================================= */
+
+@layer utilities {
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  @keyframes scan {
+    0% { top: -2px; }
+    100% { top: 100%; }
+  }
+
+  @keyframes data-stream {
+    0% { transform: translateY(-100%); opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { transform: translateY(100%); opacity: 0; }
+  }
+}
