@@ -1,5 +1,5 @@
 import { useTraffic, type CommuterNotification } from '@/hooks/useTraffic';
-import { segments } from '@/lib/bengaluru-roads';
+import { allSegments } from '@/lib/india-roads';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMemo } from 'react';
 import trafficScene from '@/assets/traffic-scene.png';
@@ -92,7 +92,7 @@ export default function CommuterPanel() {
   const { states, predictCongestion, notifications, dismissNotification } = useTraffic();
 
   const nearestRoad = useMemo(() => {
-    const sorted = [...segments]
+    const sorted = [...allSegments]
       .map(seg => ({ seg, state: states.get(seg.id)! }))
       .filter(s => s.state)
       .sort((a, b) => b.state.congestionLevel - a.state.congestionLevel);
@@ -100,7 +100,7 @@ export default function CommuterPanel() {
   }, [states]);
 
   const bestAlternates = useMemo(() =>
-    [...segments]
+    [...allSegments]
       .map(seg => ({ seg, state: states.get(seg.id)! }))
       .filter(s => s.state && s.state.congestionLevel < 0.35)
       .sort((a, b) => a.state.congestionLevel - b.state.congestionLevel)

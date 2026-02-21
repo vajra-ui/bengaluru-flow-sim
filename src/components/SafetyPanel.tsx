@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, AlertTriangle, MapPin, Phone, Star, Navigation, Eye, Siren, ChevronDown, ChevronUp, Send, Users, Lightbulb, Camera, Clock } from 'lucide-react';
-import { segments, nodes } from '@/lib/bengaluru-roads';
+import { allSegments, allNodes } from '@/lib/india-roads';
 import { useTraffic } from '@/hooks/useTraffic';
 import {
   getSegmentSafetyScore, getAllSafetyScores, getRecentIncidents, getMockRatings,
@@ -58,7 +58,7 @@ function TransportBadge({ mode }: { mode: TransportMode }) {
 function IncidentCard({ incident }: { incident: SafetyIncident }) {
   const icons: Record<string, string> = { harassment: '⚠️', theft: '🚨', stalking: '👁️', poor_lighting: '💡', unsafe_area: '🔺' };
   const sevColor = incident.severity === 'high' ? 'border-l-destructive' : incident.severity === 'medium' ? 'border-l-accent' : 'border-l-muted';
-  const segName = segments.find(s => s.id === incident.segmentId)?.name ?? 'Unknown';
+  const segName = allSegments.find(s => s.id === incident.segmentId)?.name ?? 'Unknown';
   const timeAgo = Math.round((Date.now() - incident.reportedAt) / 60000);
   const timeStr = timeAgo < 60 ? `${timeAgo}m ago` : `${Math.round(timeAgo / 60)}h ago`;
 
@@ -79,7 +79,7 @@ function IncidentCard({ incident }: { incident: SafetyIncident }) {
 }
 
 function RatingCard({ rating }: { rating: CrowdRating }) {
-  const segName = segments.find(s => s.id === rating.segmentId)?.name ?? 'Unknown';
+  const segName = allSegments.find(s => s.id === rating.segmentId)?.name ?? 'Unknown';
   return (
     <div className="panel p-2.5">
       <div className="flex items-start gap-2">
@@ -109,13 +109,26 @@ type SafetyTab = 'overview' | 'route' | 'incidents' | 'emergency';
 export default function SafetyPanel() {
   const [tab, setTab] = useState<SafetyTab>('overview');
   const [selectedSeg, setSelectedSeg] = useState<string>('orr-silk-mara');
+  const [fromSearch, setFromSearch] = useState('Majestic');
+  const [toSearch, setToSearch] = useState('Whitefield');
   const [fromNode, setFromNode] = useState('majestic');
   const [toNode, setToNode] = useState('whitefield');
+  const [showFromSuggestions, setShowFromSuggestions] = useState(false);
+  const [showToSuggestions, setShowToSuggestions] = useState(false);
   const [liveTracking, setLiveTracking] = useState(false);
   const [newRating, setNewRating] = useState(0);
   const [newComment, setNewComment] = useState('');
   const [userRatings, setUserRatings] = useState<CrowdRating[]>([]);
   const { states } = useTraffic();
+
+  const filteredFromNodes = useMemo(() =>
+    allNodes.filter(n => n.name.toLowerCase().includes(fromSearch.toLowerCase())),
+    [fromSearch]
+  );
+  const filteredToNodes = useMemo(() =>
+    allNodes.filter(n => n.name.toLowerCase().includes(toSearch.toLowerCase())),
+    [toSearch]
+  );
 
   const allScores = useMemo(() => getAllSafetyScores(), []);
   const currentScore = useMemo(() => getSegmentSafetyScore(selectedSeg), [selectedSeg]);
@@ -124,9 +137,9 @@ export default function SafetyPanel() {
   const transportModes = useMemo(() => getTransportModes(selectedSeg), [selectedSeg]);
   const safeRoutes = useMemo(() => findSafestRoute(fromNode, toNode), [fromNode, toNode]);
 
-  // Sort segments by safety for heatmap overview
   const sortedSegments = useMemo(() =>
-    segments.map(s => ({ seg: s, score: allScores.get(s.id)! }))
+    allSegments.map(s => ({ seg: s, score: allScores.get(s.id)! }))
+      .filter(s => s.score)
       .sort((a, b) => a.score.overall - b.score.overall),
     [allScores]
   );
@@ -196,7 +209,7 @@ export default function SafetyPanel() {
                   <SafetyGauge score={currentScore.overall} />
                   <div>
                     <div className="text-xs text-muted-foreground">Your Route Safety</div>
-                    <div className="text-sm font-bold text-foreground">{segments.find(s => s.id === selectedSeg)?.name}</div>
+                    <div className="text-sm font-bold text-foreground">{allSegments.find(s => s.id === selectedSeg)?.name}</div>
                     <div className={`text-xs font-bold mt-0.5 ${
                       currentScore.overall >= 65 ? 'congestion-low' : currentScore.overall >= 50 ? 'congestion-medium' : 'congestion-high'
                     }`}>
@@ -223,7 +236,7 @@ export default function SafetyPanel() {
                   onChange={e => setSelectedSeg(e.target.value)}
                   className="w-full text-xs bg-secondary/50 text-foreground border border-border rounded-lg px-2 py-1.5"
                 >
-                  {segments.map(s => (
+                  {allSegments.map(s => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
@@ -298,17 +311,47 @@ export default function SafetyPanel() {
                 <div className="text-xs font-bold text-foreground mb-2">🧭 Find Safest Route</div>
                 <div className="text-[10px] text-muted-foreground mb-2">We prioritize safety over shortest distance.</div>
                 <div className="flex flex-col gap-2">
-                  <div>
+                  <div className="relative">
                     <label className="text-[9px] text-muted-foreground uppercase">From</label>
-                    <select value={fromNode} onChange={e => setFromNode(e.target.value)} className="w-full text-xs bg-secondary/50 text-foreground border border-border rounded px-2 py-1.5">
-                      {nodes.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                    </select>
+                    <input
+                      type="text"
+                      value={fromSearch}
+                      onChange={e => { setFromSearch(e.target.value); setShowFromSuggestions(true); }}
+                      onFocus={() => setShowFromSuggestions(true)}
+                      placeholder="Search location..."
+                      className="w-full text-xs bg-secondary/50 text-foreground border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    {showFromSuggestions && filteredFromNodes.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg max-h-32 overflow-y-auto">
+                        {filteredFromNodes.slice(0, 8).map(n => (
+                          <button key={n.id} onClick={() => { setFromNode(n.id); setFromSearch(n.name); setShowFromSuggestions(false); }}
+                            className="w-full text-left px-2 py-1.5 text-[11px] text-foreground hover:bg-secondary/50 transition-colors">
+                            📍 {n.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div>
+                  <div className="relative">
                     <label className="text-[9px] text-muted-foreground uppercase">To</label>
-                    <select value={toNode} onChange={e => setToNode(e.target.value)} className="w-full text-xs bg-secondary/50 text-foreground border border-border rounded px-2 py-1.5">
-                      {nodes.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                    </select>
+                    <input
+                      type="text"
+                      value={toSearch}
+                      onChange={e => { setToSearch(e.target.value); setShowToSuggestions(true); }}
+                      onFocus={() => setShowToSuggestions(true)}
+                      placeholder="Search destination..."
+                      className="w-full text-xs bg-secondary/50 text-foreground border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    {showToSuggestions && filteredToNodes.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg max-h-32 overflow-y-auto">
+                        {filteredToNodes.slice(0, 8).map(n => (
+                          <button key={n.id} onClick={() => { setToNode(n.id); setToSearch(n.name); setShowToSuggestions(false); }}
+                            className="w-full text-left px-2 py-1.5 text-[11px] text-foreground hover:bg-secondary/50 transition-colors">
+                            📍 {n.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

@@ -1,5 +1,5 @@
 import { useTraffic } from '@/hooks/useTraffic';
-import { segments } from '@/lib/bengaluru-roads';
+import { allSegments } from '@/lib/india-roads';
 import { generateAlerts, generateRegulations } from '@/lib/traffic-alerts';
 import { getOfficersForSegment, getPreventiveActions } from '@/lib/traffic-officers';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,7 +19,7 @@ function CongestionBar({ level }: { level: number }) {
 /** Road detail modal */
 function RoadDetailModal({ segmentId, onClose }: { segmentId: string; onClose: () => void }) {
   const { states, predictCongestion } = useTraffic();
-  const seg = segments.find(s => s.id === segmentId);
+  const seg = allSegments.find(s => s.id === segmentId);
   const state = states.get(segmentId);
   const prediction = predictCongestion(segmentId);
   const officers = getOfficersForSegment(segmentId);
@@ -162,7 +162,7 @@ export default function AuthorityPanel() {
   const criticalCount = alerts.filter(a => a.severity === 'critical').length;
 
   const segmentsData = useMemo(() =>
-    segments.map(seg => ({ seg, state: states.get(seg.id)!, prediction: predictCongestion(seg.id) }))
+    allSegments.map(seg => ({ seg, state: states.get(seg.id)!, prediction: predictCongestion(seg.id) }))
       .filter(s => s.state)
       .sort((a, b) => b.state.congestionLevel - a.state.congestionLevel),
     [states, predictCongestion]

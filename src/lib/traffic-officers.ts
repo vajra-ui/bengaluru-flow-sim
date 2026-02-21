@@ -1,4 +1,4 @@
-import { segments } from './bengaluru-roads';
+import { allSegments } from './india-roads';
 
 export interface TrafficOfficer {
   id: string;
@@ -65,7 +65,7 @@ export function getOfficersForSegment(segmentId: string): TrafficOfficer[] {
 
 /** Get the segment detail with officer info */
 export function getSegmentOfficerInfo(segmentId: string) {
-  const seg = segments.find(s => s.id === segmentId);
+  const seg = allSegments.find(s => s.id === segmentId);
   const assignedOfficers = getOfficersForSegment(segmentId);
   return { segment: seg, officers: assignedOfficers };
 }

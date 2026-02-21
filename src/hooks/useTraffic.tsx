@@ -1,6 +1,6 @@
 import { createContext, useContext, useRef, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { TrafficEngine, type SegmentState, type SensorReading } from '@/lib/traffic-engine';
-import { segments } from '@/lib/bengaluru-roads';
+import { allSegments } from '@/lib/india-roads';
 
 export interface CommuterNotification {
   id: string;
@@ -50,7 +50,7 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
 
       // Generate commuter notifications for roads transitioning to heavy
       const newNotifs: CommuterNotification[] = [];
-      for (const seg of segments) {
+      for (const seg of allSegments) {
         const curr = statesMap.get(seg.id);
         const prev = prevStatesRef.current.get(seg.id);
         if (!curr) continue;

@@ -1,4 +1,4 @@
-import { segments, getConnectedSegments } from './bengaluru-roads';
+import { allSegments, getAllConnectedSegments } from './india-roads';
 
 export interface SegmentState {
   id: string;
@@ -68,7 +68,7 @@ export class TrafficEngine {
 
   constructor() {
     // Initialize all segments
-    for (const seg of segments) {
+    for (const seg of allSegments) {
       const baseCongestion = (corridorWeights[seg.id] ?? 0.5) * getTimeMultiplier();
       const vehicleCount = Math.floor(baseCongestion * seg.capacity * (0.6 + Math.random() * 0.4));
       const congestion = vehicleCount / seg.capacity;
@@ -96,16 +96,14 @@ export class TrafficEngine {
     const prevCongestions = new Map<string, number>();
     this.states.forEach((s, id) => prevCongestions.set(id, s.congestionLevel));
 
-    for (const seg of segments) {
+    for (const seg of allSegments) {
       const state = this.states.get(seg.id)!;
       const baseWeight = corridorWeights[seg.id] ?? 0.5;
       
-      // Random perturbation (signal cycles, etc.)
       const signalPulse = Math.sin(this.tickCount * 0.15 + seg.id.length) * 0.08;
       const randomNoise = (Math.random() - 0.5) * 0.06;
       
-      // Wave propagation from connected segments
-      const connected = getConnectedSegments(seg.id);
+      const connected = getAllConnectedSegments(seg.id);
       let spillover = 0;
       for (const cId of connected) {
         const cState = this.states.get(cId);
@@ -213,7 +211,7 @@ export class TrafficEngine {
       totalVehicles += state.vehicleCount;
       totalCongestion += state.congestionLevel;
       if (state.congestionLevel > 0.75) {
-        const seg = segments.find(s => s.id === id);
+        const seg = allSegments.find(s => s.id === id);
         if (seg) hotspots.push(seg.name);
       }
     });
