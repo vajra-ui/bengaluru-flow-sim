@@ -1,5 +1,6 @@
 // Women's Safety Navigation Engine - Simulated real-time data
-import { segments, nodes, type RoadSegment } from './bengaluru-roads';
+import { type RoadSegment } from './bengaluru-roads';
+import { allSegments, allNodes } from './india-roads';
 
 export interface SafetyFactor {
   crowdDensity: number;    // 0-1 (0=empty, 1=overcrowded)
@@ -102,7 +103,7 @@ function getTimeRisk(): number {
 }
 
 export function getSegmentSafetyScore(segmentId: string): SafetyScore {
-  const seg = segments.find(s => s.id === segmentId);
+  const seg = allSegments.find(s => s.id === segmentId);
   if (!seg) {
     return { overall: 50, riskIndex: 0.5, grade: 'C', label: 'Unknown', factors: { crowdDensity: 0.5, lighting: 0.5, incidentHistory: 0.5, policePresence: 0.5, cctvCoverage: 0.5, timeRisk: 0.5 } };
   }
@@ -144,7 +145,7 @@ export function getSegmentSafetyScore(segmentId: string): SafetyScore {
 // Get all segment safety scores (for heatmap)
 export function getAllSafetyScores(): Map<string, SafetyScore> {
   const map = new Map<string, SafetyScore>();
-  for (const seg of segments) {
+  for (const seg of allSegments) {
     map.set(seg.id, getSegmentSafetyScore(seg.id));
   }
   return map;
@@ -179,7 +180,7 @@ export function getMockRatings(): CrowdRating[] {
 
 // Transport modes per segment
 export function getTransportModes(segmentId: string): TransportMode[] {
-  const seg = segments.find(s => s.id === segmentId);
+  const seg = allSegments.find(s => s.id === segmentId);
   if (!seg) return [];
 
   const modes: TransportMode[] = [];
@@ -209,7 +210,7 @@ export function findSafestRoute(fromNodeId: string, toNodeId: string): SafeRoute
   const routes: SafeRoute[] = [];
 
   // Find direct segments
-  const direct = segments.filter(s =>
+  const direct = allSegments.filter(s =>
     (s.from === fromNodeId && s.to === toNodeId) || (s.to === fromNodeId && s.from === toNodeId)
   );
 
@@ -227,10 +228,10 @@ export function findSafestRoute(fromNodeId: string, toNodeId: string): SafeRoute
   }
 
   // Find 1-hop routes
-  const fromSegs = segments.filter(s => s.from === fromNodeId || s.to === fromNodeId);
+  const fromSegs = allSegments.filter(s => s.from === fromNodeId || s.to === fromNodeId);
   for (const s1 of fromSegs) {
     const midNode = s1.from === fromNodeId ? s1.to : s1.from;
-    const toSegs = segments.filter(s => (s.from === midNode && s.to === toNodeId) || (s.to === midNode && s.from === toNodeId));
+    const toSegs = allSegments.filter(s => (s.from === midNode && s.to === toNodeId) || (s.to === midNode && s.from === toNodeId));
     for (const s2 of toSegs) {
       const safety1 = getSegmentSafetyScore(s1.id);
       const safety2 = getSegmentSafetyScore(s2.id);

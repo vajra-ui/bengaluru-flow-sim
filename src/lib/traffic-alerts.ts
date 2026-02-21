@@ -1,5 +1,5 @@
 import { type SegmentState } from './traffic-engine';
-import { segments, getConnectedSegments } from './bengaluru-roads';
+import { allSegments, getAllConnectedSegments } from './india-roads';
 
 export interface TrafficAlert {
   id: string;
@@ -25,7 +25,7 @@ export function generateAlerts(states: Map<string, SegmentState>): TrafficAlert[
   const alerts: TrafficAlert[] = [];
   const now = Date.now();
 
-  for (const seg of segments) {
+  for (const seg of allSegments) {
     const state = states.get(seg.id);
     if (!state) continue;
 
@@ -59,7 +59,7 @@ export function generateAlerts(states: Map<string, SegmentState>): TrafficAlert[
 
     // Gridlock propagation
     if (state.congestionLevel > 0.75) {
-      const connected = getConnectedSegments(seg.id);
+      const connected = getAllConnectedSegments(seg.id);
       const congestedNeighbors = connected.filter(cId => {
         const cs = states.get(cId);
         return cs && cs.congestionLevel > 0.6;
@@ -101,7 +101,7 @@ export function generateRegulations(states: Map<string, SegmentState>): Regulati
   let priority = 1;
 
   // Find worst segments
-  const ranked = segments
+  const ranked = allSegments
     .map(seg => ({ seg, state: states.get(seg.id)! }))
     .filter(s => s.state)
     .sort((a, b) => b.state.congestionLevel - a.state.congestionLevel);
@@ -120,14 +120,14 @@ export function generateRegulations(states: Map<string, SegmentState>): Regulati
     });
 
     // Find best alternate
-    const connected = getConnectedSegments(seg.id);
+    const connected = getAllConnectedSegments(seg.id);
     const bestAlt = connected
       .map(cId => ({ id: cId, state: states.get(cId) }))
       .filter(c => c.state && c.state.congestionLevel < 0.4)
       .sort((a, b) => (a.state?.congestionLevel ?? 1) - (b.state?.congestionLevel ?? 1))[0];
 
     if (bestAlt) {
-      const altSeg = segments.find(s => s.id === bestAlt.id);
+      const altSeg = allSegments.find(s => s.id === bestAlt.id);
       actions.push({
         id: `clear-${bestAlt.id}`,
         priority: priority++,

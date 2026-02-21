@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, X, Volume2 } from 'lucide-react';
 import { useTraffic } from '@/hooks/useTraffic';
-import { segments } from '@/lib/bengaluru-roads';
+import { allSegments } from '@/lib/india-roads';
 import { getSegmentSafetyScore, getTransportModes, emergencyContacts, getRecentIncidents } from '@/lib/safety-engine';
 
 type AssistantState = 'idle' | 'listening' | 'processing' | 'speaking';
@@ -28,7 +28,7 @@ function detectIntent(text: string): { intent: Intent; segmentHint?: string } {
   const lower = text.toLowerCase();
 
   let segmentHint: string | undefined;
-  for (const seg of segments) {
+  for (const seg of allSegments) {
     const keywords = seg.name.toLowerCase().split(/[\s→:]+/).filter(w => w.length > 3);
     if (keywords.some(k => lower.includes(k))) {
       segmentHint = seg.id;
@@ -183,7 +183,7 @@ export default function NanbaAssistant() {
 
   const generateResponse = useCallback((intentData: { intent: Intent; segmentHint?: string }) => {
     const segId = intentData.segmentHint || userSegment;
-    const seg = segments.find(s => s.id === segId);
+    const seg = allSegments.find(s => s.id === segId);
     const segState = states.get(segId);
     const segName = seg?.name || 'your current road';
 
@@ -214,7 +214,7 @@ export default function NanbaAssistant() {
         return `Nanba, based on the current traffic flow rate, you will likely reach the front of the queue in approximately ${timeToFront} minute${timeToFront > 1 ? 's' : ''}. There are about ${vehiclesAhead} vehicles ahead of you.`;
       }
       case 'alternate_route': {
-        const connected = segments.filter(s =>
+        const connected = allSegments.filter(s =>
           s.id !== segId && (s.from === seg?.to || s.from === seg?.from || s.to === seg?.from || s.to === seg?.to)
         );
         const alternatives = connected
@@ -243,7 +243,7 @@ export default function NanbaAssistant() {
       }
       case 'safe_route': {
         const safety = getSegmentSafetyScore(segId);
-        const allSegs = segments.map(s => ({ s, score: getSegmentSafetyScore(s.id) })).sort((a, b) => b.score.overall - a.score.overall);
+        const allSegs = allSegments.map(s => ({ s, score: getSegmentSafetyScore(s.id) })).sort((a, b) => b.score.overall - a.score.overall);
         const safest = allSegs[0];
         return `Nanba, your current route ${segName} has a safety score of ${safety.overall}. The safest route in the city right now is ${safest.s.name} with a score of ${safest.score.overall}. I always recommend choosing well-lit routes with police presence over shorter alternatives. You can check the Safety tab for detailed route comparisons.`;
       }

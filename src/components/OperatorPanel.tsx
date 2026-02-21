@@ -1,5 +1,5 @@
 import { useTraffic } from '@/hooks/useTraffic';
-import { sensors } from '@/lib/bengaluru-roads';
+import { allSensors } from '@/lib/india-roads';
 import { motion } from 'framer-motion';
 import { useState, useMemo } from 'react';
 import { Wifi, WifiOff, Activity } from 'lucide-react';
@@ -78,16 +78,16 @@ export default function OperatorPanel() {
   const [filter, setFilter] = useState<'all' | 'loop' | 'camera' | 'radar'>('all');
 
   const filteredSensors = useMemo(() =>
-    filter === 'all' ? sensors : sensors.filter(s => s.type === filter),
+    filter === 'all' ? allSensors : allSensors.filter(s => s.type === filter),
     [filter]
   );
 
-  const onlineCount = sensors.length; // simulated — mostly online
+  const onlineCount = allSensors.length;
   const filters = [
-    { id: 'all' as const, label: '📋 All', count: sensors.length },
-    { id: 'camera' as const, label: '📷 Camera', count: sensors.filter(s => s.type === 'camera').length },
-    { id: 'radar' as const, label: '📡 Radar', count: sensors.filter(s => s.type === 'radar').length },
-    { id: 'loop' as const, label: '🔄 Loop', count: sensors.filter(s => s.type === 'loop').length },
+    { id: 'all' as const, label: '📋 All', count: allSensors.length },
+    { id: 'camera' as const, label: '📷 Camera', count: allSensors.filter(s => s.type === 'camera').length },
+    { id: 'radar' as const, label: '📡 Radar', count: allSensors.filter(s => s.type === 'radar').length },
+    { id: 'loop' as const, label: '🔄 Loop', count: allSensors.filter(s => s.type === 'loop').length },
   ];
 
   return (
@@ -104,7 +104,7 @@ export default function OperatorPanel() {
         {/* Summary */}
         <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="text-center panel p-2">
-            <div className="text-lg font-bold font-mono text-primary">{sensors.length}</div>
+            <div className="text-lg font-bold font-mono text-primary">{allSensors.length}</div>
             <div className="text-[9px] text-muted-foreground">Total</div>
           </div>
           <div className="text-center panel p-2">
