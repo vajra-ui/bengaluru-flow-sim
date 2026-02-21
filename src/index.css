@@ -4,35 +4,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ================================================= */
-/* 🔥 CRITICAL: WEBVIEW + MOBILE FOUNDATION */
-/* ================================================= */
-
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  overflow-x: hidden;
-  overscroll-behavior: none;
-  -webkit-tap-highlight-color: transparent;
-  font-family: 'Inter', sans-serif;
-}
-
-/* ✅ Safe area (iPhone notch support) */
-.safe-area {
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
-/* ================================================= */
-/* 🎨 THEME VARIABLES */
-/* ================================================= */
-
 @layer base {
   :root {
     --background: 220 20% 6%;
@@ -82,23 +53,22 @@ body {
     --sidebar-border: 210 20% 18%;
     --sidebar-ring: 185 80% 50%;
   }
+}
 
+@layer base {
   * {
     @apply border-border;
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
   }
 
   .font-mono {
     font-family: 'JetBrains Mono', monospace;
   }
 }
-
-/* ================================================= */
-/* 🧩 COMPONENT STYLES */
-/* ================================================= */
 
 @layer components {
   .glow-border {
@@ -154,10 +124,6 @@ body {
   .congestion-medium { @apply text-accent; }
   .congestion-high { @apply text-destructive; }
 }
-
-/* ================================================= */
-/* 🎞️ ANIMATIONS */
-/* ================================================= */
 
 @layer utilities {
   @keyframes pulse-glow {
