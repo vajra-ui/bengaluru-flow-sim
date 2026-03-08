@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, X, Volume2 } from 'lucide-react';
 import { useTraffic } from '@/hooks/useTraffic';
-import { allSegments } from '@/lib/india-roads';
+import { allSegments } from '@/lib/tamilnadu-roads';
 import { getSegmentSafetyScore, getTransportModes, emergencyContacts, getRecentIncidents } from '@/lib/safety-engine';
 
 type AssistantState = 'idle' | 'listening' | 'processing' | 'speaking';
