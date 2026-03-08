@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, AlertTriangle, MapPin, Phone, Star, Navigation, Eye, Siren, ChevronDown, ChevronUp, Send, Users, Lightbulb, Camera, Clock } from 'lucide-react';
-import { allSegments, allNodes } from '@/lib/india-roads';
+import { allSegments, allNodes } from '@/lib/tamilnadu-roads';
 import { useTraffic } from '@/hooks/useTraffic';
 import {
   getSegmentSafetyScore, getAllSafetyScores, getRecentIncidents, getMockRatings,
