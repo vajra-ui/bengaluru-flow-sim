@@ -1,13 +1,15 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, AlertTriangle, MapPin, Phone, Star, Navigation, Eye, Siren, ChevronDown, ChevronUp, Send, Users, Lightbulb, Camera, Clock } from 'lucide-react';
+import { Shield, AlertTriangle, MapPin, Phone, Star, Navigation, Eye, Siren, ChevronDown, ChevronUp, Send, Users, Lightbulb, Camera, Clock, Search, Loader2 } from 'lucide-react';
 import { allSegments, allNodes } from '@/lib/tamilnadu-roads';
 import { useTraffic } from '@/hooks/useTraffic';
 import {
   getSegmentSafetyScore, getAllSafetyScores, getRecentIncidents, getMockRatings,
-  getTransportModes, findSafestRoute, emergencyContacts, safetyColor,
-  type SafetyScore, type SafetyIncident, type CrowdRating, type TransportMode, type SafeRoute,
+  getTransportModes, emergencyContacts, safetyColor,
+  type SafetyScore, type SafetyIncident, type CrowdRating, type TransportMode,
 } from '@/lib/safety-engine';
+import { geocodeLocation, getRouteAlternatives, generateRouteSafetyScore, type GeoLocation, type RouteResult } from '@/lib/route-service';
+import type { ActiveRoute } from '@/components/TrafficMap';
 
 /* ─── Sub-components ─── */
 
@@ -102,40 +104,122 @@ function RatingCard({ rating }: { rating: CrowdRating }) {
   );
 }
 
+/* ─── Location search input with geocoding ─── */
+function LocationSearchInput({ 
+  value, 
+  onChange, 
+  onSelect, 
+  placeholder, 
+  label 
+}: { 
+  value: string; 
+  onChange: (v: string) => void; 
+  onSelect: (loc: GeoLocation) => void; 
+  placeholder: string;
+  label: string;
+}) {
+  const [suggestions, setSuggestions] = useState<GeoLocation[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const handleChange = (text: string) => {
+    onChange(text);
+    setShowSuggestions(true);
+    
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    
+    if (text.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    setLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      const results = await geocodeLocation(text);
+      setSuggestions(results);
+      setLoading(false);
+    }, 400);
+  };
+
+  return (
+    <div className="relative">
+      <label className="text-[9px] text-muted-foreground uppercase">{label}</label>
+      <div className="relative">
+        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          value={value}
+          onChange={e => handleChange(e.target.value)}
+          onFocus={() => value.length >= 2 && setShowSuggestions(true)}
+          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+          placeholder={placeholder}
+          className="w-full text-xs bg-secondary/50 text-foreground border border-border rounded pl-7 pr-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        {loading && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary animate-spin" />}
+      </div>
+      {showSuggestions && suggestions.length > 0 && (
+        <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg max-h-40 overflow-y-auto shadow-lg">
+          {suggestions.map((loc, idx) => (
+            <button 
+              key={idx} 
+              onClick={() => { onSelect(loc); onChange(loc.name); setShowSuggestions(false); }}
+              className="w-full text-left px-2 py-2 text-[11px] text-foreground hover:bg-secondary/50 transition-colors border-b border-border last:border-0"
+            >
+              <div className="font-medium">📍 {loc.name}</div>
+              <div className="text-[9px] text-muted-foreground truncate">{loc.displayName}</div>
+            </button>
+          ))}
+        </div>
+      )}
+      {showSuggestions && !loading && value.length >= 2 && suggestions.length === 0 && (
+        <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg p-3 text-center">
+          <div className="text-[10px] text-muted-foreground">No locations found. Try a different search.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Real route result card ─── */
+interface RealRouteResult {
+  route: RouteResult;
+  safetyScore: number;
+  isSafest: boolean;
+}
+
 /* ─── Main Panel ─── */
 
 type SafetyTab = 'overview' | 'route' | 'incidents' | 'emergency';
 
-export default function SafetyPanel() {
+interface SafetyPanelProps {
+  onRoutesFound?: (routes: ActiveRoute[], markers: { from?: { lat: number; lng: number; name: string }; to?: { lat: number; lng: number; name: string } }) => void;
+}
+
+export default function SafetyPanel({ onRoutesFound }: SafetyPanelProps) {
   const [tab, setTab] = useState<SafetyTab>('overview');
   const [selectedSeg, setSelectedSeg] = useState<string>('che-egmore-tnagar');
-  const [fromSearch, setFromSearch] = useState('Chennai Central');
-  const [toSearch, setToSearch] = useState('T. Nagar');
-  const [fromNode, setFromNode] = useState('chennai-central');
-  const [toNode, setToNode] = useState('chennai-tnagar');
-  const [showFromSuggestions, setShowFromSuggestions] = useState(false);
-  const [showToSuggestions, setShowToSuggestions] = useState(false);
+  
+  // Real route search state
+  const [fromSearch, setFromSearch] = useState('');
+  const [toSearch, setToSearch] = useState('');
+  const [fromLocation, setFromLocation] = useState<GeoLocation | null>(null);
+  const [toLocation, setToLocation] = useState<GeoLocation | null>(null);
+  const [routeResults, setRouteResults] = useState<RealRouteResult[]>([]);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState('');
+
   const [liveTracking, setLiveTracking] = useState(false);
   const [newRating, setNewRating] = useState(0);
   const [newComment, setNewComment] = useState('');
   const [userRatings, setUserRatings] = useState<CrowdRating[]>([]);
   const { states } = useTraffic();
 
-  const filteredFromNodes = useMemo(() =>
-    allNodes.filter(n => n.name.toLowerCase().includes(fromSearch.toLowerCase())),
-    [fromSearch]
-  );
-  const filteredToNodes = useMemo(() =>
-    allNodes.filter(n => n.name.toLowerCase().includes(toSearch.toLowerCase())),
-    [toSearch]
-  );
-
   const allScores = useMemo(() => getAllSafetyScores(), []);
   const currentScore = useMemo(() => getSegmentSafetyScore(selectedSeg), [selectedSeg]);
   const incidents = useMemo(() => getRecentIncidents(), []);
   const ratings = useMemo(() => [...userRatings, ...getMockRatings()], [userRatings]);
   const transportModes = useMemo(() => getTransportModes(selectedSeg), [selectedSeg]);
-  const safeRoutes = useMemo(() => findSafestRoute(fromNode, toNode), [fromNode, toNode]);
 
   const sortedSegments = useMemo(() =>
     allSegments.map(s => ({ seg: s, score: allScores.get(s.id)! }))
@@ -143,6 +227,72 @@ export default function SafetyPanel() {
       .sort((a, b) => a.score.overall - b.score.overall),
     [allScores]
   );
+
+  // Search for real routes when both locations are set
+  const searchRoutes = useCallback(async () => {
+    if (!fromLocation || !toLocation) return;
+    
+    setRouteLoading(true);
+    setRouteError('');
+    setRouteResults([]);
+
+    try {
+      const routes = await getRouteAlternatives(
+        { lat: fromLocation.lat, lng: fromLocation.lng },
+        { lat: toLocation.lat, lng: toLocation.lng }
+      );
+
+      if (routes.length === 0) {
+        setRouteError('No routes found. Try different locations.');
+        onRoutesFound?.([], {});
+        return;
+      }
+
+      const results: RealRouteResult[] = routes.map((route, idx) => ({
+        route,
+        safetyScore: generateRouteSafetyScore(route),
+        isSafest: false,
+      }));
+
+      // Sort by safety and mark safest
+      results.sort((a, b) => b.safetyScore - a.safetyScore);
+      if (results.length > 0) results[0].isSafest = true;
+
+      setRouteResults(results);
+
+      // Send routes to map
+      const routeColors = ['#22c55e', '#3b82f6', '#a855f7', '#f97316'];
+      const activeRoutes: ActiveRoute[] = results.map((r, idx) => ({
+        path: r.route.path,
+        color: r.isSafest ? '#22c55e' : routeColors[idx + 1] ?? '#64748b',
+        label: `${r.route.distance} km · ${r.route.duration} min · Safety: ${r.safetyScore}`,
+        isSafest: r.isSafest,
+      }));
+
+      onRoutesFound?.(activeRoutes, {
+        from: { lat: fromLocation.lat, lng: fromLocation.lng, name: fromLocation.name },
+        to: { lat: toLocation.lat, lng: toLocation.lng, name: toLocation.name },
+      });
+    } catch {
+      setRouteError('Failed to fetch routes. Please try again.');
+    } finally {
+      setRouteLoading(false);
+    }
+  }, [fromLocation, toLocation, onRoutesFound]);
+
+  // Auto-search when both locations selected
+  useEffect(() => {
+    if (fromLocation && toLocation) {
+      searchRoutes();
+    }
+  }, [fromLocation, toLocation, searchRoutes]);
+
+  // Clear routes when leaving route tab
+  useEffect(() => {
+    if (tab !== 'route') {
+      onRoutesFound?.([], {});
+    }
+  }, [tab, onRoutesFound]);
 
   const submitRating = useCallback(() => {
     if (newRating === 0) return;
@@ -218,7 +368,6 @@ export default function SafetyPanel() {
                   </div>
                 </div>
 
-                {/* Factors */}
                 <div className="flex flex-col gap-1.5">
                   <FactorBar label="Lighting" icon={<Lightbulb className="w-3 h-3" />} value={currentScore.factors.lighting} />
                   <FactorBar label="CCTV" icon={<Camera className="w-3 h-3" />} value={currentScore.factors.cctvCoverage} />
@@ -254,7 +403,7 @@ export default function SafetyPanel() {
               <div className="panel p-3">
                 <div className="text-xs font-bold text-foreground mb-2">🗺️ City Safety Heatmap</div>
                 <div className="flex flex-col gap-1">
-                  {sortedSegments.map(({ seg, score }) => (
+                  {sortedSegments.slice(0, 15).map(({ seg, score }) => (
                     <button
                       key={seg.id}
                       onClick={() => setSelectedSeg(seg.id)}
@@ -274,7 +423,6 @@ export default function SafetyPanel() {
               {/* Crowdsourced Ratings */}
               <div className="panel p-3">
                 <div className="text-xs font-bold text-foreground mb-2">⭐ Community Safety Ratings</div>
-                {/* Submit rating */}
                 <div className="bg-secondary/30 rounded-lg p-2.5 mb-2">
                   <div className="text-[10px] text-muted-foreground mb-1">Rate this route's safety:</div>
                   <div className="flex items-center gap-1 mb-1.5">
@@ -304,89 +452,109 @@ export default function SafetyPanel() {
             </motion.div>
           )}
 
-          {/* ─── ROUTE TAB ─── */}
+          {/* ─── ROUTE TAB — REAL ROUTING ─── */}
           {tab === 'route' && (
             <motion.div key="route" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-3">
               <div className="panel p-3">
-                <div className="text-xs font-bold text-foreground mb-2">🧭 Find Safest Route</div>
-                <div className="text-[10px] text-muted-foreground mb-2">We prioritize safety over shortest distance.</div>
+                <div className="text-xs font-bold text-foreground mb-1">🧭 Find Safest Route</div>
+                <div className="text-[10px] text-muted-foreground mb-3">Search any place in Tamil Nadu — real routes shown on map.</div>
                 <div className="flex flex-col gap-2">
-                  <div className="relative">
-                    <label className="text-[9px] text-muted-foreground uppercase">From</label>
-                    <input
-                      type="text"
-                      value={fromSearch}
-                      onChange={e => { setFromSearch(e.target.value); setShowFromSuggestions(true); }}
-                      onFocus={() => setShowFromSuggestions(true)}
-                      placeholder="Search location..."
-                      className="w-full text-xs bg-secondary/50 text-foreground border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    {showFromSuggestions && filteredFromNodes.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg max-h-32 overflow-y-auto">
-                        {filteredFromNodes.slice(0, 8).map(n => (
-                          <button key={n.id} onClick={() => { setFromNode(n.id); setFromSearch(n.name); setShowFromSuggestions(false); }}
-                            className="w-full text-left px-2 py-1.5 text-[11px] text-foreground hover:bg-secondary/50 transition-colors">
-                            📍 {n.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <label className="text-[9px] text-muted-foreground uppercase">To</label>
-                    <input
-                      type="text"
-                      value={toSearch}
-                      onChange={e => { setToSearch(e.target.value); setShowToSuggestions(true); }}
-                      onFocus={() => setShowToSuggestions(true)}
-                      placeholder="Search destination..."
-                      className="w-full text-xs bg-secondary/50 text-foreground border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    {showToSuggestions && filteredToNodes.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg max-h-32 overflow-y-auto">
-                        {filteredToNodes.slice(0, 8).map(n => (
-                          <button key={n.id} onClick={() => { setToNode(n.id); setToSearch(n.name); setShowToSuggestions(false); }}
-                            className="w-full text-left px-2 py-1.5 text-[11px] text-foreground hover:bg-secondary/50 transition-colors">
-                            📍 {n.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <LocationSearchInput
+                    value={fromSearch}
+                    onChange={setFromSearch}
+                    onSelect={setFromLocation}
+                    placeholder="e.g. Paavai College, T.Nagar, Madurai..."
+                    label="From"
+                  />
+                  <LocationSearchInput
+                    value={toSearch}
+                    onChange={setToSearch}
+                    onSelect={setToLocation}
+                    placeholder="e.g. Pachal, Coimbatore, Salem..."
+                    label="To"
+                  />
                 </div>
+                {fromLocation && toLocation && (
+                  <button
+                    onClick={searchRoutes}
+                    disabled={routeLoading}
+                    className="w-full mt-3 py-2 bg-primary/20 text-primary font-bold text-xs rounded-lg hover:bg-primary/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {routeLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Navigation className="w-3.5 h-3.5" />}
+                    {routeLoading ? 'Finding Routes...' : 'Search Routes'}
+                  </button>
+                )}
               </div>
 
-              {safeRoutes.length === 0 ? (
-                <div className="panel p-4 text-center">
-                  <div className="text-2xl mb-1">🔍</div>
-                  <div className="text-xs text-muted-foreground">No routes found between these points.</div>
+              {/* Route loading */}
+              {routeLoading && (
+                <div className="panel p-6 text-center">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-2" />
+                  <div className="text-xs text-muted-foreground">Finding real routes on Tamil Nadu roads...</div>
                 </div>
-              ) : (
-                safeRoutes.map((route, i) => (
-                  <div key={i} className={`panel p-3 ${route.isSafest ? 'border-success/40 bg-success/5' : ''}`}>
-                    {route.isSafest && (
-                      <div className="text-[9px] font-bold text-success uppercase tracking-widest mb-1">✅ Safest Route</div>
-                    )}
-                    <div className="flex items-center gap-2 mb-2">
-                      <SafetyGauge score={route.safetyScore} size="sm" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[11px] font-bold text-foreground">{route.segmentNames.join(' → ')}</div>
-                        <div className="text-[9px] text-muted-foreground">{route.distance.toFixed(1)} km · ~{route.estimatedTime} min</div>
+              )}
+
+              {/* Route error */}
+              {routeError && (
+                <div className="panel p-4 text-center border-destructive/30">
+                  <div className="text-2xl mb-1">🔍</div>
+                  <div className="text-xs text-muted-foreground">{routeError}</div>
+                </div>
+              )}
+
+              {/* No location selected */}
+              {!fromLocation && !toLocation && !routeLoading && (
+                <div className="panel p-4 text-center">
+                  <div className="text-2xl mb-2">🗺️</div>
+                  <div className="text-xs font-bold text-foreground mb-1">Search Any Location</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    Type any place name — colleges, villages, bus stops, temples, anything in Tamil Nadu. Real routes will be shown on the map.
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1 justify-center">
+                    {['Paavai College', 'Pachal', 'Marina Beach', 'Ooty', 'Rameswaram'].map(place => (
+                      <button
+                        key={place}
+                        onClick={() => {
+                          if (!fromSearch) setFromSearch(place);
+                          else setToSearch(place);
+                        }}
+                        className="text-[9px] bg-primary/10 text-primary px-2 py-1 rounded-full hover:bg-primary/20 transition-colors"
+                      >
+                        {place}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Route results */}
+              {routeResults.map((result, i) => (
+                <div key={i} className={`panel p-3 ${result.isSafest ? 'border-success/40 bg-success/5' : ''}`}>
+                  {result.isSafest && (
+                    <div className="text-[9px] font-bold text-success uppercase tracking-widest mb-1">✅ Safest Route</div>
+                  )}
+                  <div className="flex items-center gap-2 mb-2">
+                    <SafetyGauge score={result.safetyScore} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11px] font-bold text-foreground">
+                        {fromLocation?.name} → {toLocation?.name}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground">
+                        {result.route.distance} km · ~{result.route.duration} min
+                        {result.route.summary && ` · via ${result.route.summary}`}
                       </div>
                     </div>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {route.transportModes.slice(0, 3).map(m => {
-                        const icons: Record<string, string> = { bus: '🚌', metro: '🚇', auto: '🛺', walking: '🚶‍♀️' };
-                        return (
-                          <span key={m.id} className="text-[9px] bg-secondary/60 text-muted-foreground px-1.5 py-0.5 rounded-full">
-                            {icons[m.type]} {m.name} ({m.safetyScore})
-                          </span>
-                        );
-                      })}
-                    </div>
                   </div>
-                ))
-              )}
+                  <div className="flex gap-2 text-[9px]">
+                    <span className={`px-1.5 py-0.5 rounded-full ${result.safetyScore >= 70 ? 'bg-success/20 congestion-low' : result.safetyScore >= 50 ? 'bg-accent/20 congestion-medium' : 'bg-destructive/20 congestion-high'}`}>
+                      Safety: {result.safetyScore}/100
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                      {result.isSafest ? '🛡️ Recommended' : `Route ${i + 1}`}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </motion.div>
           )}
 
@@ -405,7 +573,6 @@ export default function SafetyPanel() {
           {/* ─── EMERGENCY TAB ─── */}
           {tab === 'emergency' && (
             <motion.div key="emergency" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-3">
-              {/* SOS Button */}
               <motion.button
                 className="w-full py-6 rounded-xl bg-destructive text-destructive-foreground font-bold text-lg tracking-wide"
                 style={{ boxShadow: '0 0 30px hsl(0 75% 55% / 0.4)' }}
@@ -417,7 +584,6 @@ export default function SafetyPanel() {
               </motion.button>
               <div className="text-[10px] text-center text-muted-foreground">Tap to alert emergency contacts with your live location</div>
 
-              {/* Live Tracking Toggle */}
               <div className="panel p-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -441,7 +607,6 @@ export default function SafetyPanel() {
                 )}
               </div>
 
-              {/* Emergency Contacts */}
               <div className="panel p-3">
                 <div className="text-xs font-bold text-foreground mb-2">📞 Emergency Contacts</div>
                 {emergencyContacts.map((c, i) => {
@@ -462,13 +627,12 @@ export default function SafetyPanel() {
                 })}
               </div>
 
-              {/* Safety Tips */}
               <div className="panel p-3">
                 <div className="text-xs font-bold text-foreground mb-2">💡 Safety Tips</div>
                 {[
                   'Share your live location with a trusted contact before traveling',
                   'Prefer well-lit, busy roads over shortcuts through isolated areas',
-                  'Use Namma Metro with women-only coach when available',
+                  'Use Chennai Metro with women-only coach when available',
                   'Keep emergency numbers on speed dial',
                   'Trust your instincts — if something feels wrong, move to a crowded area',
                 ].map((tip, i) => (

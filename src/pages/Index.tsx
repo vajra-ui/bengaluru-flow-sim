@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import TrafficMap from '@/components/TrafficMap';
+import TrafficMap, { type ActiveRoute } from '@/components/TrafficMap';
 import CommuterPanel from '@/components/CommuterPanel';
 import OperatorPanel from '@/components/OperatorPanel';
 import AuthorityPanel from '@/components/AuthorityPanel';
@@ -34,6 +34,13 @@ function DashboardContent() {
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [hamburgerOpen, setHamburgerOpen] = useState(false);
+  const [activeRoutes, setActiveRoutes] = useState<ActiveRoute[]>([]);
+  const [routeMarkers, setRouteMarkers] = useState<{ from?: { lat: number; lng: number; name: string }; to?: { lat: number; lng: number; name: string } }>({});
+
+  const handleRoutesFound = useCallback((routes: ActiveRoute[], markers: { from?: { lat: number; lng: number; name: string }; to?: { lat: number; lng: number; name: string } }) => {
+    setActiveRoutes(routes);
+    setRouteMarkers(markers);
+  }, []);
   const { zoneStats, tickCount, trafficMode, setTrafficMode } = useTraffic();
   const isMobile = useIsMobile();
 
@@ -175,7 +182,7 @@ function DashboardContent() {
       <div className="flex flex-1 min-h-0 relative">
         {/* Map */}
         <div className="flex-1 relative">
-          <TrafficMap onSegmentClick={setSelectedSegment} viewMode={view} />
+          <TrafficMap onSegmentClick={setSelectedSegment} viewMode={view} activeRoutes={activeRoutes} routeMarkers={routeMarkers} />
         </div>
 
         {/* Side panel */}
@@ -198,7 +205,7 @@ function DashboardContent() {
                 {view === 'commuter' && <CommuterPanel />}
                 {view === 'operator' && <OperatorPanel />}
                 {view === 'authority' && <AuthorityPanel />}
-                {view === 'safety' && <SafetyPanel />}
+                {view === 'safety' && <SafetyPanel onRoutesFound={handleRoutesFound} />}
               </motion.div>
             )}
           </AnimatePresence>
@@ -216,7 +223,7 @@ function DashboardContent() {
                 {view === 'commuter' && <CommuterPanel />}
                 {view === 'operator' && <OperatorPanel />}
                 {view === 'authority' && <AuthorityPanel />}
-                {view === 'safety' && <SafetyPanel />}
+                {view === 'safety' && <SafetyPanel onRoutesFound={handleRoutesFound} />}
               </motion.div>
             </AnimatePresence>
           </div>
