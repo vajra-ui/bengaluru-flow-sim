@@ -87,8 +87,8 @@ export default function TrafficMap({ onSegmentClick, className, viewMode }: Traf
     if (!containerRef.current || mapRef.current) return;
 
     const map = L.map(containerRef.current, {
-      center: [22.5, 78.5], // Center of India
-      zoom: 5,
+      center: [11.0, 78.5], // Center of Tamil Nadu
+      zoom: 7,
       zoomControl: false,
       attributionControl: false,
     });

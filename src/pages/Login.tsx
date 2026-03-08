@@ -39,7 +39,7 @@ export default function Login() {
               TN TRAFFIC INTEL
             </h1>
           </div>
-          <p className="text-xs text-muted-foreground font-mono">YOUR GUARDIAN FRIEND</p>
+          <p className="text-xs text-muted-foreground font-mono">TAMIL NADU TRAFFIC INTELLIGENCE</p>
         </div>
 
         {/* Role selector */}

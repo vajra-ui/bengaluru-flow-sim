@@ -66,7 +66,7 @@ export default function NanbaAssistant() {
   const [transcript, setTranscript] = useState('');
   const [response, setResponse] = useState('');
   const [showPanel, setShowPanel] = useState(false);
-  const [userSegment, setUserSegment] = useState<string>('orr-silk-mara');
+  const [userSegment, setUserSegment] = useState<string>('che-egmore-tnagar');
   const { states, predictCongestion } = useTraffic();
   const recognitionRef = useRef<any>(null);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

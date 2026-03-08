@@ -1,5 +1,5 @@
 import { useTraffic } from '@/hooks/useTraffic';
-import { allSegments } from '@/lib/india-roads';
+import { allSegments } from '@/lib/tamilnadu-roads';
 import { generateAlerts, generateRegulations } from '@/lib/traffic-alerts';
 import { getOfficersForSegment, getPreventiveActions } from '@/lib/traffic-officers';
 import { motion, AnimatePresence } from 'framer-motion';

@@ -1,5 +1,5 @@
 import { useTraffic, type CommuterNotification } from '@/hooks/useTraffic';
-import { allSegments } from '@/lib/india-roads';
+import { allSegments } from '@/lib/tamilnadu-roads';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMemo } from 'react';
 import trafficScene from '@/assets/traffic-scene.png';

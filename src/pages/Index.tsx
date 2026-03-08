@@ -44,7 +44,7 @@ function DashboardContent() {
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-primary shrink-0" />
           <h1 className="font-mono text-[10px] sm:text-sm font-bold tracking-wider text-foreground glow-text truncate">
-            {isMobile ? 'TRAFFIC INTEL' : 'INDIA TRAFFIC INTELLIGENCE'}
+            {isMobile ? 'TN TRAFFIC' : 'TAMIL NADU TRAFFIC INTELLIGENCE'}
           </h1>
           <div className="status-dot-live ml-1 sm:ml-2 shrink-0" />
           <span className="text-[8px] sm:text-[10px] font-mono text-muted-foreground shrink-0">LIVE</span>
