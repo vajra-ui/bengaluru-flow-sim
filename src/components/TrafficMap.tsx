@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useTraffic } from '@/hooks/useTraffic';
 import { getAllSafetyScores, getSegmentSafetyScore, safetyColor } from '@/lib/safety-engine';
-import { allSegments } from '@/lib/india-roads';
+import { allSegments } from '@/lib/tamilnadu-roads';
 
 function congestionColor(level: number): string {
   if (level < 0.3) return '#22c55e';
