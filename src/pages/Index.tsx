@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import TrafficMap from '@/components/TrafficMap';
 import CommuterPanel from '@/components/CommuterPanel';
