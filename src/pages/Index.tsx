@@ -34,6 +34,13 @@ function DashboardContent() {
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [hamburgerOpen, setHamburgerOpen] = useState(false);
+  const [activeRoutes, setActiveRoutes] = useState<ActiveRoute[]>([]);
+  const [routeMarkers, setRouteMarkers] = useState<{ from?: { lat: number; lng: number; name: string }; to?: { lat: number; lng: number; name: string } }>({});
+
+  const handleRoutesFound = useCallback((routes: ActiveRoute[], markers: { from?: { lat: number; lng: number; name: string }; to?: { lat: number; lng: number; name: string } }) => {
+    setActiveRoutes(routes);
+    setRouteMarkers(markers);
+  }, []);
   const { zoneStats, tickCount, trafficMode, setTrafficMode } = useTraffic();
   const isMobile = useIsMobile();
 
