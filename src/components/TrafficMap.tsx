@@ -62,17 +62,29 @@ function buildSafetyPopup(segName: string, segId: string): string {
     </div>`;
 }
 
+export interface ActiveRoute {
+  path: [number, number][];
+  color: string;
+  label: string;
+  isSafest?: boolean;
+}
+
 interface TrafficMapProps {
   onSegmentClick?: (id: string) => void;
   className?: string;
   viewMode?: string;
+  activeRoutes?: ActiveRoute[];
+  routeMarkers?: { from?: { lat: number; lng: number; name: string }; to?: { lat: number; lng: number; name: string } };
 }
 
-export default function TrafficMap({ onSegmentClick, className, viewMode }: TrafficMapProps) {
+export default function TrafficMap({ onSegmentClick, className, viewMode, activeRoutes, routeMarkers }: TrafficMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const polylinesRef = useRef<Map<string, L.Polyline>>(new Map());
   const glowLinesRef = useRef<Map<string, L.Polyline>>(new Map());
+  const routeLinesRef = useRef<L.Polyline[]>([]);
+  const routeGlowRef = useRef<L.Polyline[]>([]);
+  const markersRef = useRef<L.Marker[]>([]);
   const isSafetyViewRef = useRef(false);
   const { states } = useTraffic();
 
@@ -82,12 +94,12 @@ export default function TrafficMap({ onSegmentClick, className, viewMode }: Traf
     isSafetyViewRef.current = isSafetyView;
   }, [isSafetyView]);
 
-  // Initialize map — centered on India
+  // Initialize map
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
     const map = L.map(containerRef.current, {
-      center: [11.0, 78.5], // Center of Tamil Nadu
+      center: [11.0, 78.5],
       zoom: 7,
       zoomControl: false,
       attributionControl: false,
@@ -132,6 +144,91 @@ export default function TrafficMap({ onSegmentClick, className, viewMode }: Traf
 
     return () => { map.remove(); mapRef.current = null; polylinesRef.current.clear(); glowLinesRef.current.clear(); };
   }, []);
+
+  // Draw active routes on map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Clear previous routes
+    routeLinesRef.current.forEach(l => map.removeLayer(l));
+    routeGlowRef.current.forEach(l => map.removeLayer(l));
+    markersRef.current.forEach(m => map.removeLayer(m));
+    routeLinesRef.current = [];
+    routeGlowRef.current = [];
+    markersRef.current = [];
+
+    if (!activeRoutes || activeRoutes.length === 0) return;
+
+    // Draw each route
+    activeRoutes.forEach((route, idx) => {
+      const positions = route.path.map(p => [p[0], p[1]] as L.LatLngExpression);
+      
+      // Glow for safest route
+      if (route.isSafest) {
+        const glow = L.polyline(positions, {
+          color: route.color,
+          weight: 14,
+          opacity: 0.2,
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false,
+        }).addTo(map);
+        routeGlowRef.current.push(glow);
+      }
+
+      const line = L.polyline(positions, {
+        color: route.color,
+        weight: route.isSafest ? 5 : 3,
+        opacity: route.isSafest ? 0.9 : 0.5,
+        lineCap: 'round',
+        lineJoin: 'round',
+        dashArray: route.isSafest ? undefined : '8 6',
+      }).addTo(map);
+
+      line.bindTooltip(
+        `<div style="font-family:monospace;font-size:11px;padding:4px">
+          <b>${route.label}</b><br/>
+          ${route.isSafest ? '✅ Safest Route' : `Route ${idx + 1}`}
+        </div>`,
+        { sticky: true, className: 'traffic-tooltip' }
+      );
+
+      routeLinesRef.current.push(line);
+    });
+
+    // Add markers for from/to
+    if (routeMarkers?.from) {
+      const fromIcon = L.divIcon({
+        className: 'route-marker',
+        html: `<div style="background:#22c55e;width:14px;height:14px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px rgba(34,197,94,0.6)"></div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+      });
+      const m = L.marker([routeMarkers.from.lat, routeMarkers.from.lng], { icon: fromIcon }).addTo(map);
+      m.bindTooltip(routeMarkers.from.name, { permanent: true, direction: 'top', className: 'route-label', offset: [0, -10] });
+      markersRef.current.push(m);
+    }
+
+    if (routeMarkers?.to) {
+      const toIcon = L.divIcon({
+        className: 'route-marker',
+        html: `<div style="background:#ef4444;width:14px;height:14px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px rgba(239,68,68,0.6)"></div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+      });
+      const m = L.marker([routeMarkers.to.lat, routeMarkers.to.lng], { icon: toIcon }).addTo(map);
+      m.bindTooltip(routeMarkers.to.name, { permanent: true, direction: 'top', className: 'route-label', offset: [0, -10] });
+      markersRef.current.push(m);
+    }
+
+    // Fit map to route bounds
+    if (activeRoutes[0]?.path.length > 0) {
+      const allPoints = activeRoutes.flatMap(r => r.path);
+      const bounds = L.latLngBounds(allPoints.map(p => [p[0], p[1]] as L.LatLngExpression));
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+    }
+  }, [activeRoutes, routeMarkers]);
 
   // Update polyline styles
   useEffect(() => {
@@ -228,6 +325,18 @@ export default function TrafficMap({ onSegmentClick, className, viewMode }: Traf
         .safety-popup .leaflet-popup-tip { background: #0d1117 !important; }
         .safety-popup .leaflet-popup-close-button { color: #64748b !important; font-size: 16px !important; top: 8px !important; right: 8px !important; }
         .safety-popup .leaflet-popup-close-button:hover { color: #e2e8f0 !important; }
+        .route-label {
+          background: hsl(220 18% 10% / 0.9) !important;
+          color: hsl(190 60% 85%) !important;
+          border: 1px solid hsl(210 20% 22%) !important;
+          border-radius: 4px !important;
+          padding: 2px 6px !important;
+          font-family: monospace !important;
+          font-size: 10px !important;
+          font-weight: bold !important;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
+        }
+        .route-label::before { border-top-color: hsl(210 20% 22%) !important; }
       `}</style>
     </div>
   );
