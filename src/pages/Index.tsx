@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import TrafficMap from '@/components/TrafficMap';
+import TrafficMap, { type ActiveRoute } from '@/components/TrafficMap';
 import CommuterPanel from '@/components/CommuterPanel';
 import OperatorPanel from '@/components/OperatorPanel';
 import AuthorityPanel from '@/components/AuthorityPanel';
