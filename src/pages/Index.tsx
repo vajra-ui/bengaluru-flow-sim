@@ -182,7 +182,7 @@ function DashboardContent() {
       <div className="flex flex-1 min-h-0 relative">
         {/* Map */}
         <div className="flex-1 relative">
-          <TrafficMap onSegmentClick={setSelectedSegment} viewMode={view} />
+          <TrafficMap onSegmentClick={setSelectedSegment} viewMode={view} activeRoutes={activeRoutes} routeMarkers={routeMarkers} />
         </div>
 
         {/* Side panel */}
