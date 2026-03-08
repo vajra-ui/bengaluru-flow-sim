@@ -17,8 +17,8 @@ export default function Splash() {
       className="h-screen w-full flex items-center justify-center"
       style={{
         background: `
-          radial-gradient(circle at center, rgba(255, 0, 150, 0.25) 0%, transparent 40%),
-          linear-gradient(135deg, #0f001f, #2a004d, #5f0aa3)
+          radial-gradient(circle at center, rgba(0, 200, 255, 0.25) 0%, transparent 40%),
+          linear-gradient(135deg, #001a1f, #00334d, #005577)
         `,
       }}
     >
