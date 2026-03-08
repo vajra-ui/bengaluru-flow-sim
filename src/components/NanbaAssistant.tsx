@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, X, Volume2 } from 'lucide-react';
+import { Mic, MicOff, X, Volume2, Send, MessageCircle } from 'lucide-react';
 import { useTraffic } from '@/hooks/useTraffic';
 import { allSegments } from '@/lib/tamilnadu-roads';
 import { getSegmentSafetyScore, getTransportModes, emergencyContacts, getRecentIncidents } from '@/lib/safety-engine';
@@ -8,21 +8,17 @@ import { getSegmentSafetyScore, getTransportModes, emergencyContacts, getRecentI
 type AssistantState = 'idle' | 'listening' | 'processing' | 'speaking';
 
 type Intent =
-  | 'location'
-  | 'density'
-  | 'vehicle_count'
-  | 'spacing'
-  | 'queue'
-  | 'time_to_front'
-  | 'alternate_route'
-  | 'movement'
-  | 'prediction'
-  | 'safety'
-  | 'safe_route'
-  | 'emergency'
-  | 'transport'
-  | 'general'
-  | 'greeting';
+  | 'location' | 'density' | 'vehicle_count' | 'spacing' | 'queue'
+  | 'time_to_front' | 'alternate_route' | 'movement' | 'prediction'
+  | 'safety' | 'safe_route' | 'emergency' | 'transport'
+  | 'traffic_advice' | 'best_time' | 'road_condition' | 'weather_traffic'
+  | 'general' | 'greeting';
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: number;
+}
 
 function detectIntent(text: string): { intent: Intent; segmentHint?: string } {
   const lower = text.toLowerCase();
@@ -49,6 +45,10 @@ function detectIntent(text: string): { intent: Intent; segmentHint?: string } {
   if (/alternate|alternative|other route|different road|bypass/.test(lower)) return { intent: 'alternate_route', segmentHint };
   if (/move|movement|will i move|probability/.test(lower)) return { intent: 'movement', segmentHint };
   if (/predict|forecast|future|will it clear|clearing/.test(lower)) return { intent: 'prediction', segmentHint };
+  if (/best time|when.*travel|avoid.*traffic|peak.*hour|rush.*hour/.test(lower)) return { intent: 'best_time', segmentHint };
+  if (/advice|suggest|recommend|tip|what.*do/.test(lower)) return { intent: 'traffic_advice', segmentHint };
+  if (/road.*condition|pothole|construction|block/.test(lower)) return { intent: 'road_condition', segmentHint };
+  if (/rain|weather|flood/.test(lower)) return { intent: 'weather_traffic', segmentHint };
   if (/hello|hi|nanba|hey/.test(lower)) return { intent: 'greeting', segmentHint };
   return { intent: 'general', segmentHint };
 }
@@ -67,119 +67,95 @@ export default function NanbaAssistant() {
   const [response, setResponse] = useState('');
   const [showPanel, setShowPanel] = useState(false);
   const [userSegment, setUserSegment] = useState<string>('che-egmore-tnagar');
-  const { states, predictCongestion } = useTraffic();
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const { states, predictCongestion, zoneStats } = useTraffic();
   const recognitionRef = useRef<any>(null);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastInteraction = useRef(Date.now());
 
-  // Robust speech queue management
   const speechQueueRef = useRef<string[]>([]);
   const isSpeakingRef = useRef(false);
 
   const processQueue = useCallback(() => {
     if (isSpeakingRef.current || speechQueueRef.current.length === 0) return;
-
     const textToSpeak = speechQueueRef.current.shift();
     if (!textToSpeak) return;
-
     isSpeakingRef.current = true;
     setState('speaking');
-
-    // Cancel any ongoing speech first
     window.speechSynthesis.cancel();
-
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     utterance.rate = 0.92;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
     utterance.lang = 'en-IN';
-
-    // Try to pick a good English voice
     const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find(v => v.lang === 'en-IN') ||
       voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female')) ||
-      voices.find(v => v.lang.startsWith('en')) ||
-      voices[0];
+      voices.find(v => v.lang.startsWith('en')) || voices[0];
     if (preferred) utterance.voice = preferred;
-
+    const keepAlive = setInterval(() => {
+      if (!window.speechSynthesis.speaking) clearInterval(keepAlive);
+      else window.speechSynthesis.resume();
+    }, 5000);
     utterance.onend = () => {
+      clearInterval(keepAlive);
       isSpeakingRef.current = false;
-      if (speechQueueRef.current.length > 0) {
-        processQueue();
-      } else {
-        setState('idle');
-      }
+      if (speechQueueRef.current.length > 0) processQueue();
+      else setState('idle');
     };
-
-    utterance.onerror = (e) => {
-      console.error('TTS error:', e.error);
+    utterance.onerror = () => {
+      clearInterval(keepAlive);
       isSpeakingRef.current = false;
       setState('idle');
       processQueue();
     };
-
-    // Chrome bug workaround: resume synth
     window.speechSynthesis.resume();
     window.speechSynthesis.speak(utterance);
-
-    // Chrome pause bug: keep synth alive
-    const keepAlive = setInterval(() => {
-      if (!window.speechSynthesis.speaking) {
-        clearInterval(keepAlive);
-      } else {
-        window.speechSynthesis.resume();
-      }
-    }, 5000);
-
-    utterance.onend = () => {
-      clearInterval(keepAlive);
-      isSpeakingRef.current = false;
-      if (speechQueueRef.current.length > 0) {
-        processQueue();
-      } else {
-        setState('idle');
-      }
-    };
   }, []);
 
-  // Load voices
   useEffect(() => {
     window.speechSynthesis.getVoices();
     const onVoicesChanged = () => window.speechSynthesis.getVoices();
     window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
-    return () => {
-      window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
-      window.speechSynthesis.cancel();
-    };
+    return () => { window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged); window.speechSynthesis.cancel(); };
   }, []);
 
   const speak = useCallback((text: string) => {
-    speechQueueRef.current = [text]; // Replace queue (latest response)
+    speechQueueRef.current = [text];
     window.speechSynthesis.cancel();
     isSpeakingRef.current = false;
-    // Small delay to let cancel() take effect
     setTimeout(() => processQueue(), 100);
   }, [processQueue]);
 
-  // Reset inactivity timer
   const resetInactivity = useCallback(() => {
     lastInteraction.current = Date.now();
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     inactivityTimer.current = setTimeout(() => {
       if (state === 'idle' && showPanel) {
         const seg = states.get(userSegment);
-        const trend = seg?.trend === 'falling' ? 'Traffic is gradually clearing.' : seg?.trend === 'rising' ? 'Traffic is building up, but hang in there.' : 'Traffic is steady right now.';
-        const msg = `Nanba, are you feeling stressed? Don't worry, I am here with you. ${trend}`;
+        const trend = seg?.trend === 'falling' ? 'Traffic is gradually clearing.' : seg?.trend === 'rising' ? 'Traffic is building up.' : 'Traffic is steady.';
+        const msg = `Nanba, are you still there? ${trend} Ask me anything!`;
         setResponse(msg);
-        speak(msg);
+        addAssistantMessage(msg);
       }
-    }, 60000);
-  }, [state, showPanel, states, userSegment, speak]);
+    }, 90000);
+  }, [state, showPanel, states, userSegment]);
 
   useEffect(() => {
     if (showPanel) resetInactivity();
     return () => { if (inactivityTimer.current) clearTimeout(inactivityTimer.current); };
   }, [showPanel, resetInactivity]);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  const addAssistantMessage = (text: string) => {
+    setChatMessages(prev => [...prev, { role: 'assistant', text, timestamp: Date.now() }]);
+  };
 
   const generateResponse = useCallback((intentData: { intent: Intent; segmentHint?: string }) => {
     const segId = intentData.segmentHint || userSegment;
@@ -187,9 +163,7 @@ export default function NanbaAssistant() {
     const segState = states.get(segId);
     const segName = seg?.name || 'your current road';
 
-    if (!segState) {
-      return `Nanba, I'm having trouble reading the traffic data right now. Please try again in a moment.`;
-    }
+    if (!segState) return `Nanba, I'm having trouble reading the traffic data right now. Please try again in a moment.`;
 
     const congLabel = getCongestionLabel(segState.congestionLevel);
     const speedKmh = Math.round(segState.speedFactor * 65);
@@ -198,21 +172,20 @@ export default function NanbaAssistant() {
 
     switch (intentData.intent) {
       case 'greeting':
-        return `Nanba, welcome to Traffic Dhosth! I'm your traffic companion. You are currently on ${segName}. The traffic here is ${congLabel}. How can I help you?`;
+        return `Nanba, welcome! 🙏 I'm your traffic companion. You are on ${segName}. Traffic is ${congLabel}. Total ${zoneStats.totalVehicles.toLocaleString()} vehicles tracked across Tamil Nadu. How can I help?`;
       case 'location':
-        return `Nanba, you are currently on ${segName}. There are approximately ${segState.vehicleCount} vehicles on this stretch, and the traffic queue ahead of you is about ${segState.queueLength} vehicles long.`;
+        return `📍 You are on ${segName}. ${segState.vehicleCount} vehicles on this stretch, queue length: ${segState.queueLength}. Speed: ${speedKmh} km/h.`;
       case 'density':
-        return `Nanba, the current traffic density on ${segName} is ${congLabel}. Vehicles are ${segState.avgSpacing < 10 ? 'closely packed with limited spacing' : segState.avgSpacing < 25 ? 'moderately spaced' : 'well spaced'}, so movement is ${speedKmh < 15 ? 'very slow' : speedKmh < 30 ? 'slow' : 'moderate'}.`;
+        return `Traffic on ${segName} is ${congLabel}. Vehicles are ${segState.avgSpacing < 10 ? 'closely packed' : segState.avgSpacing < 25 ? 'moderately spaced' : 'well spaced'}. Speed: ${speedKmh} km/h. ${segState.trend === 'rising' ? '⚠️ Getting worse.' : segState.trend === 'falling' ? '✅ Improving.' : 'Stable.'}`;
       case 'vehicle_count':
-        return `Nanba, there are currently ${segState.vehicleCount} vehicles on ${segName}. The inflow rate is ${segState.inflowRate} vehicles per cycle, and ${segState.outflowRate} are moving out.`;
+        return `🚗 ${segState.vehicleCount} vehicles on ${segName}. Inflow: ${segState.inflowRate}/cycle, outflow: ${segState.outflowRate}/cycle. ${segState.inflowRate > segState.outflowRate ? '⚠️ More vehicles entering than leaving.' : '✅ Flow is balanced.'}`;
       case 'spacing':
-        return `Nanba, the average spacing between vehicles on ${segName} is approximately ${Math.round(segState.avgSpacing)} meters. ${segState.avgSpacing < 8 ? 'Vehicles are bumper to bumper.' : segState.avgSpacing < 20 ? 'There is some room to maneuver.' : 'Spacing is comfortable for lane changes.'}`;
+        return `Average spacing on ${segName}: ${Math.round(segState.avgSpacing)}m. ${segState.avgSpacing < 8 ? '🔴 Bumper to bumper! Exercise caution.' : segState.avgSpacing < 20 ? '🟡 Some room to maneuver.' : '🟢 Comfortable spacing.'}`;
       case 'queue':
-        return `Nanba, the current queue length on ${segName} is approximately ${segState.queueLength} vehicles. ${segState.trend === 'rising' ? 'The queue is growing.' : segState.trend === 'falling' ? 'The queue is shrinking.' : 'The queue is stable.'}`;
-      case 'time_to_front': {
-        if (timeToFront === 0) return `Nanba, great news! You are very close to the front of the queue on ${segName}. You should be moving freely very soon.`;
-        return `Nanba, based on the current traffic flow rate, you will likely reach the front of the queue in approximately ${timeToFront} minute${timeToFront > 1 ? 's' : ''}. There are about ${vehiclesAhead} vehicles ahead of you.`;
-      }
+        return `Queue on ${segName}: ~${segState.queueLength} vehicles. ${segState.trend === 'rising' ? '📈 Growing — consider alternate routes.' : segState.trend === 'falling' ? '📉 Shrinking — should clear soon!' : '➡️ Stable.'}`;
+      case 'time_to_front':
+        if (timeToFront === 0) return `🎉 Great news! You're near the front on ${segName}. You'll be moving freely very soon!`;
+        return `⏱️ Estimated ${timeToFront} min to reach the front. ${vehiclesAhead} vehicles ahead. ${timeToFront > 15 ? 'Consider taking an alternate route.' : 'Hang tight!'}`;
       case 'alternate_route': {
         const connected = allSegments.filter(s =>
           s.id !== segId && (s.from === seg?.to || s.from === seg?.from || s.to === seg?.from || s.to === seg?.to)
@@ -221,100 +194,115 @@ export default function NanbaAssistant() {
           .map(s => ({ seg: s, state: states.get(s.id) }))
           .filter(a => a.state && a.state.congestionLevel < (segState.congestionLevel - 0.1))
           .sort((a, b) => (a.state?.congestionLevel ?? 1) - (b.state?.congestionLevel ?? 1));
-
         if (alternatives.length > 0) {
           const best = alternatives[0];
-          const altCong = getCongestionLabel(best.state!.congestionLevel);
-          return `Nanba, I recommend taking ${best.seg.name}. Traffic there is ${altCong}, which is better than your current road. You could save significant time by switching.`;
+          return `🛣️ I recommend ${best.seg.name}. Traffic there is ${getCongestionLabel(best.state!.congestionLevel)} at ${Math.round(best.state!.speedFactor * 65)} km/h. Much better than your current road!`;
         }
-        return `Nanba, I checked nearby routes but they are all similarly congested right now. I suggest staying on ${segName} and being patient. I'll alert you when a better route opens up.`;
+        return `All nearby routes are similarly congested. Stay on ${segName} — I'll alert you when a better route opens.`;
       }
       case 'movement': {
         const moveProbability = Math.round((1 - segState.congestionLevel) * 100);
-        return `Nanba, your movement probability on ${segName} is about ${moveProbability}%. ${moveProbability > 60 ? 'You should be moving steadily.' : moveProbability > 30 ? 'Expect stop-and-go traffic.' : 'Movement is very limited right now. Hang tight.'}`;
+        return `Movement probability: ${moveProbability}%. ${moveProbability > 60 ? '🟢 Steady movement expected.' : moveProbability > 30 ? '🟡 Expect stop-and-go.' : '🔴 Very limited movement. Consider waiting or alternate routes.'}`;
       }
       case 'prediction': {
         const pred = predictCongestion(segId);
-        return `Nanba, based on current trends, the predicted congestion level for ${segName} is ${Math.round(pred.prediction * 100)}%. The risk level is ${pred.risk}. ${pred.risk === 'high' ? 'It might get worse before it gets better. Consider an alternate route.' : pred.risk === 'medium' ? 'Traffic should stabilize soon.' : 'Things are looking good ahead.'}`;
+        return `📊 Predicted congestion for ${segName}: ${Math.round(pred.prediction * 100)}%. Risk level: ${pred.risk}. ${pred.risk === 'high' ? '⚠️ Likely to get worse. Plan an alternate route.' : pred.risk === 'medium' ? 'Should stabilize soon.' : '✅ Looking good ahead!'}`;
       }
       case 'safety': {
         const safety = getSegmentSafetyScore(segId);
-        return `Nanba, the safety score for ${segName} is ${safety.overall} out of 100, which is grade ${safety.grade}, meaning ${safety.label}. Lighting is at ${Math.round(safety.factors.lighting * 100)} percent, police presence is ${Math.round(safety.factors.policePresence * 100)} percent, and CCTV coverage is ${Math.round(safety.factors.cctvCoverage * 100)} percent. ${safety.overall < 50 ? 'I recommend extra caution on this route. Consider sharing your live location with a trusted contact.' : 'This route has reasonable safety levels.'}`;
+        return `🛡️ Safety score for ${segName}: ${safety.overall}/100 (Grade ${safety.grade} — ${safety.label}). Lighting: ${Math.round(safety.factors.lighting * 100)}%, Police: ${Math.round(safety.factors.policePresence * 100)}%, CCTV: ${Math.round(safety.factors.cctvCoverage * 100)}%. ${safety.overall < 50 ? '⚠️ Extra caution recommended. Share your live location with someone.' : '✅ Reasonably safe.'}`;
       }
       case 'safe_route': {
-        const safety = getSegmentSafetyScore(segId);
         const allSegs = allSegments.map(s => ({ s, score: getSegmentSafetyScore(s.id) })).sort((a, b) => b.score.overall - a.score.overall);
-        const safest = allSegs[0];
-        return `Nanba, your current route ${segName} has a safety score of ${safety.overall}. The safest route in the city right now is ${safest.s.name} with a score of ${safest.score.overall}. I always recommend choosing well-lit routes with police presence over shorter alternatives. You can check the Safety tab for detailed route comparisons.`;
+        const top3 = allSegs.slice(0, 3);
+        return `🛡️ Top 3 safest routes right now:\n${top3.map((r, i) => `${i + 1}. ${r.s.name} — Score: ${r.score.overall}/100 (${r.score.grade})`).join('\n')}\nUse the Safety → Routes tab to search routes between specific locations with safety ratings.`;
       }
-      case 'emergency': {
-        return `Nanba, I'm here for you. For emergencies, dial the Women's Helpline at 181, or Police at 100. The TN Police Control Room can be reached at 044-28447777. You can also use Kavalan SOS App by calling 1091. Stay calm, I am with you.`;
-      }
+      case 'emergency':
+        return `🚨 Emergency contacts:\n• Women's Helpline: 181\n• Police: 100\n• Kavalan SOS: 1091\n• TN Police Control: 044-28447777\n• Ambulance: 108\nStay calm. Share your live location from the SOS tab.`;
       case 'transport': {
         const modes = getTransportModes(segId);
-        const safest = modes[0];
-        const modeList = modes.map(m => `${m.name} with safety score ${m.safetyScore}`).join(', ');
-        return `Nanba, for ${segName}, the available transport options ranked by safety are: ${modeList}. I recommend ${safest?.name ?? 'metro'} as the safest option. ${safest?.note ?? ''}`;
+        return `🚇 Transport options for ${segName} (by safety):\n${modes.map(m => `• ${m.name}: Safety ${m.safetyScore}/100 ${m.frequency ? `(${m.frequency})` : ''}`).join('\n')}\n${modes[0]?.note || ''}`;
       }
+      case 'best_time':
+        return `🕐 Best travel times in Tamil Nadu:\n• Early morning (5:30–7:30 AM): Least traffic\n• Mid-morning (10–11:30 AM): Good window\n• Afternoon (2–4 PM): Usually manageable\n❌ Avoid: 8–10 AM & 5–8 PM (peak hours)\nCurrently: ${zoneStats.avgCongestion > 0.5 ? '⚠️ Heavy period — delay if possible.' : '✅ Good time to travel!'}`;
+      case 'traffic_advice': {
+        const tips: string[] = [];
+        if (segState.congestionLevel > 0.7) tips.push('🔴 Traffic is heavy — consider delaying your trip or using alternate routes.');
+        if (segState.trend === 'rising') tips.push('📈 Traffic is building up. Leave now if you can or wait for it to peak and decline.');
+        if (segState.trend === 'falling') tips.push('📉 Traffic is easing. Good time to start your journey soon.');
+        if (zoneStats.hotspots.length > 0) tips.push(`🔥 Avoid hotspots: ${zoneStats.hotspots.slice(0, 3).join(', ')}`);
+        tips.push('💡 Use the Safety tab to find routes with best safety scores.');
+        return `Traffic advice for ${segName}:\n${tips.join('\n')}`;
+      }
+      case 'road_condition':
+        return `🛣️ Road conditions for ${segName}: Speed factor at ${Math.round(segState.speedFactor * 100)}%. ${segState.speedFactor < 0.3 ? '⚠️ Very slow — possible obstruction or bad road conditions.' : segState.speedFactor < 0.6 ? '🟡 Moderate conditions.' : '🟢 Roads are in good condition.'}`;
+      case 'weather_traffic':
+        return `🌧️ Weather impact info: During monsoon season, Tamil Nadu roads can flood, especially in Chennai, Cuddalore, and delta regions. Always check local weather before long trips. Currently, traffic data shows ${getCongestionLabel(segState.congestionLevel)} conditions on ${segName}.`;
       default:
-        return `Nanba, I can help you with traffic information and safety guidance. Try asking about your location, traffic density, safety score, safest route, transport options, or emergency contacts. I'm here for you!`;
+        return `I can help with:\n• 🚗 Traffic density & speed\n• 🛣️ Alternate routes\n• 🛡️ Safety scores\n• ⏱️ Best travel times\n• 🚇 Transport options\n• 🚨 Emergency contacts\n• 📊 Traffic predictions\nJust ask! Or use the quick buttons below.`;
     }
-  }, [states, userSegment, predictCongestion]);
+  }, [states, userSegment, predictCongestion, zoneStats]);
+
+  const handleUserInput = useCallback((text: string) => {
+    if (!text.trim()) return;
+    
+    setChatMessages(prev => [...prev, { role: 'user', text, timestamp: Date.now() }]);
+    setTranscript(text);
+    setState('processing');
+    
+    const intentData = detectIntent(text);
+    if (intentData.segmentHint) setUserSegment(intentData.segmentHint);
+    
+    const reply = generateResponse(intentData);
+    setResponse(reply);
+    addAssistantMessage(reply);
+    setShowPanel(true);
+    resetInactivity();
+    setState('idle');
+  }, [generateResponse, resetInactivity]);
+
+  const handleChatSubmit = useCallback(() => {
+    if (!chatInput.trim()) return;
+    handleUserInput(chatInput);
+    setChatInput('');
+  }, [chatInput, handleUserInput]);
 
   const startListening = useCallback(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      const msg = 'Nanba, speech recognition is not supported in your browser. Please try Chrome or Edge.';
+      const msg = 'Speech recognition not supported. Please use text chat or try Chrome/Edge.';
       setResponse(msg);
+      addAssistantMessage(msg);
       setShowPanel(true);
-      speak(msg);
       return;
     }
-
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-IN';
     recognition.interimResults = true;
     recognition.continuous = false;
-
     recognition.onstart = () => setState('listening');
-
     recognition.onresult = (event: any) => {
       const results = Array.from(event.results);
       const text = results.map((r: any) => r[0].transcript).join('');
       setTranscript(text);
-
       if (event.results[event.results.length - 1].isFinal) {
-        setState('processing');
-        const intentData = detectIntent(text);
-        if (intentData.segmentHint) setUserSegment(intentData.segmentHint);
-
-        const reply = generateResponse(intentData);
-        setResponse(reply);
-        setShowPanel(true);
-        resetInactivity();
-        // Speak the reply out loud
-        setTimeout(() => speak(reply), 300);
+        handleUserInput(text);
+        setTimeout(() => speak(response), 300);
       }
     };
-
     recognition.onerror = (e: any) => {
-      console.error('Speech recognition error', e.error);
       setState('idle');
       if (e.error === 'not-allowed') {
-        const msg = 'Nanba, please allow microphone access to use voice commands.';
+        const msg = 'Please allow microphone access to use voice commands. You can also type your question below.';
         setResponse(msg);
+        addAssistantMessage(msg);
         setShowPanel(true);
-        speak(msg);
       }
     };
-
-    recognition.onend = () => {
-      if (state === 'listening') setState('idle');
-    };
-
+    recognition.onend = () => { if (state === 'listening') setState('idle'); };
     recognitionRef.current = recognition;
     recognition.start();
-  }, [state, generateResponse, speak, resetInactivity]);
+  }, [state, handleUserInput, speak, response]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) recognitionRef.current.stop();
@@ -334,11 +322,24 @@ export default function NanbaAssistant() {
     setState('idle');
   }, []);
 
+  const togglePanel = useCallback(() => {
+    if (showPanel) {
+      closePanel();
+    } else {
+      setShowPanel(true);
+      if (chatMessages.length === 0) {
+        const greeting = generateResponse({ intent: 'greeting' });
+        setResponse(greeting);
+        addAssistantMessage(greeting);
+      }
+    }
+  }, [showPanel, closePanel, chatMessages.length, generateResponse]);
+
   return (
     <>
-      {/* Floating mic button */}
+      {/* Floating button */}
       <motion.button
-        onClick={state === 'listening' ? stopListening : startListening}
+        onClick={togglePanel}
         className={`fixed bottom-4 right-4 z-50 w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
           state === 'listening'
             ? 'bg-destructive text-destructive-foreground'
@@ -351,15 +352,14 @@ export default function NanbaAssistant() {
         animate={state === 'listening' ? { boxShadow: ['0 0 0 0 hsl(0 75% 55% / 0.4)', '0 0 0 20px hsl(0 75% 55% / 0)', '0 0 0 0 hsl(0 75% 55% / 0.4)'] } : {}}
         transition={state === 'listening' ? { duration: 1.5, repeat: Infinity } : {}}
       >
-        {state === 'listening' ? <MicOff className="w-5 h-5 sm:w-6 sm:h-6" /> : state === 'speaking' ? <Volume2 className="w-5 h-5 sm:w-6 sm:h-6" /> : <Mic className="w-5 h-5 sm:w-6 sm:h-6" />}
+        <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6" />
       </motion.button>
 
-      {/* Label */}
       <div className="fixed bottom-[4.5rem] sm:bottom-[5.5rem] right-4 sm:right-6 z-50 text-[8px] sm:text-[9px] font-mono text-muted-foreground text-center w-12 sm:w-14">
-        {state === 'idle' ? 'NANBA' : state === 'listening' ? 'LISTENING...' : state === 'processing' ? 'THINKING...' : 'SPEAKING...'}
+        NANBA
       </div>
 
-      {/* Voice wave animation when listening */}
+      {/* Voice wave */}
       <AnimatePresence>
         {state === 'listening' && (
           <motion.div
@@ -380,7 +380,7 @@ export default function NanbaAssistant() {
         )}
       </AnimatePresence>
 
-      {/* Response panel - responsive width */}
+      {/* Chat panel */}
       <AnimatePresence>
         {showPanel && (
           <motion.div
@@ -388,79 +388,86 @@ export default function NanbaAssistant() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="fixed bottom-20 sm:bottom-24 right-2 sm:right-4 z-50 w-[calc(100vw-1rem)] sm:w-80 max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl"
+            className="fixed bottom-20 sm:bottom-24 right-2 sm:right-4 z-50 w-[calc(100vw-1rem)] sm:w-80 max-h-[70vh] flex flex-col rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 border-b border-border">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
               <div className="flex items-center gap-2">
-                <div className={`w-2.5 h-2.5 rounded-full ${state === 'speaking' ? 'bg-accent animate-pulse' : 'bg-primary'}`}
-                  style={{ boxShadow: state === 'speaking' ? 'var(--glow-accent)' : 'var(--glow-primary)' }}
-                />
+                <div className={`w-2.5 h-2.5 rounded-full ${state === 'speaking' ? 'bg-accent animate-pulse' : 'bg-success'}`} />
                 <span className="font-mono text-xs font-bold text-foreground tracking-wider">NANBA</span>
-                <span className="text-[8px] sm:text-[9px] font-mono text-muted-foreground">AI COMPANION</span>
+                <span className="text-[8px] font-mono text-muted-foreground">TRAFFIC AI</span>
               </div>
-              <button onClick={closePanel} className="text-muted-foreground hover:text-foreground transition-colors">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={state === 'listening' ? stopListening : startListening}
+                  className={`p-1.5 rounded-lg transition-colors ${state === 'listening' ? 'bg-destructive/20 text-destructive' : 'hover:bg-secondary text-muted-foreground'}`}
+                  title={state === 'listening' ? 'Stop listening' : 'Voice input'}
+                >
+                  {state === 'listening' ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                </button>
+                <button onClick={closePanel} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
-            {/* Transcript */}
-            {transcript && (
-              <div className="px-3 sm:px-4 py-2 border-b border-border/50">
-                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">You said:</p>
-                <p className="text-xs text-foreground/80">{transcript}</p>
-              </div>
-            )}
-
-            {/* Response */}
-            <div className="px-3 sm:px-4 py-3">
-              {state === 'processing' ? (
-                <div className="flex items-center gap-2">
-                  <motion.div className="flex gap-1">
-                    {[0, 1, 2].map(i => (
-                      <motion.div
-                        key={i}
-                        className="w-2 h-2 rounded-full bg-primary"
-                        animate={{ opacity: [0.3, 1, 0.3] }}
-                        transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.2 }}
-                      />
-                    ))}
-                  </motion.div>
-                  <span className="text-xs text-muted-foreground font-mono">Processing...</span>
+            {/* Chat messages */}
+            <div className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-2 min-h-[120px] max-h-[40vh]">
+              {chatMessages.map((msg, idx) => (
+                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] px-3 py-2 rounded-xl text-xs whitespace-pre-line ${
+                    msg.role === 'user'
+                      ? 'bg-primary text-primary-foreground rounded-br-sm'
+                      : 'bg-secondary/70 text-foreground rounded-bl-sm'
+                  }`}>
+                    {msg.text}
+                  </div>
                 </div>
-              ) : (
-                <div>
-                  <p className="text-sm text-foreground leading-relaxed">{response}</p>
-                  {state === 'speaking' && (
-                    <div className="flex items-center gap-1.5 mt-2">
-                      <Volume2 className="w-3 h-3 text-accent animate-pulse" />
-                      <span className="text-[10px] font-mono text-accent">Speaking...</span>
-                    </div>
-                  )}
+              ))}
+              {state === 'processing' && (
+                <div className="flex justify-start">
+                  <div className="bg-secondary/70 rounded-xl rounded-bl-sm px-3 py-2 flex gap-1">
+                    {[0, 1, 2].map(i => (
+                      <motion.div key={i} className="w-2 h-2 rounded-full bg-primary" animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.2 }} />
+                    ))}
+                  </div>
                 </div>
               )}
+              <div ref={chatEndRef} />
             </div>
 
             {/* Quick actions */}
-            <div className="px-3 sm:px-4 py-2 border-t border-border/50 flex flex-wrap gap-1.5">
-              {['Where am I?', 'Traffic density?', 'Safety score?', 'Safest route?', 'Emergency help', 'Transport options?'].map(q => (
+            <div className="px-3 py-1.5 border-t border-border/50 flex flex-wrap gap-1 shrink-0">
+              {['Traffic now?', 'Safest route?', 'Best time?', 'Emergency', 'Advice'].map(q => (
                 <button
                   key={q}
-                  onClick={() => {
-                    setTranscript(q);
-                    setState('processing');
-                    const intentData = detectIntent(q);
-                    const reply = generateResponse(intentData);
-                    setResponse(reply);
-                    setShowPanel(true);
-                    resetInactivity();
-                    setTimeout(() => speak(reply), 200);
-                  }}
-                  className="px-2 py-1 text-[9px] sm:text-[10px] font-mono bg-secondary/60 text-secondary-foreground rounded-md hover:bg-secondary transition-colors"
+                  onClick={() => handleUserInput(q)}
+                  className="px-2 py-1 text-[9px] font-mono bg-secondary/60 text-secondary-foreground rounded-md hover:bg-secondary transition-colors"
                 >
                   {q}
                 </button>
               ))}
+            </div>
+
+            {/* Text input */}
+            <div className="px-3 py-2 border-t border-border shrink-0">
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleChatSubmit()}
+                  placeholder="Ask about traffic, safety, routes..."
+                  className="flex-1 text-xs bg-secondary/50 text-foreground border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <button
+                  onClick={handleChatSubmit}
+                  disabled={!chatInput.trim()}
+                  className="p-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-40"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </motion.div>
         )}

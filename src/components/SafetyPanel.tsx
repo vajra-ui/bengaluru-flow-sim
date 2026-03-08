@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, AlertTriangle, MapPin, Phone, Star, Navigation, Eye, Siren, ChevronDown, ChevronUp, Send, Users, Lightbulb, Camera, Clock, Search, Loader2 } from 'lucide-react';
+import { Shield, AlertTriangle, MapPin, Phone, Star, Navigation, Eye, Siren, ChevronDown, ChevronUp, Send, Users, Lightbulb, Camera, Clock, Search, Loader2, LocateFixed } from 'lucide-react';
 import { allSegments, allNodes } from '@/lib/tamilnadu-roads';
 import { useTraffic } from '@/hooks/useTraffic';
 import {
@@ -181,6 +181,13 @@ function LocationSearchInput({
   );
 }
 
+/* ─── Route risk category ─── */
+function getRouteCategory(score: number): { label: string; emoji: string; color: string; bgColor: string } {
+  if (score >= 70) return { label: 'SAFEST', emoji: '🟢', color: 'congestion-low', bgColor: 'bg-success/15 border-success/40' };
+  if (score >= 50) return { label: 'MODERATE', emoji: '🟡', color: 'congestion-medium', bgColor: 'bg-accent/10 border-accent/40' };
+  return { label: 'RISKY', emoji: '🔴', color: 'congestion-high', bgColor: 'bg-destructive/10 border-destructive/40' };
+}
+
 /* ─── Real route result card ─── */
 interface RealRouteResult {
   route: RouteResult;
@@ -208,6 +215,7 @@ export default function SafetyPanel({ onRoutesFound }: SafetyPanelProps) {
   const [routeResults, setRouteResults] = useState<RealRouteResult[]>([]);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState('');
+  const [geoLoading, setGeoLoading] = useState(false);
 
   const [liveTracking, setLiveTracking] = useState(false);
   const [newRating, setNewRating] = useState(0);
@@ -228,9 +236,48 @@ export default function SafetyPanel({ onRoutesFound }: SafetyPanelProps) {
     [allScores]
   );
 
-  // Search for real routes when both locations are set
+  // Detect live location
+  const detectLiveLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setRouteError('Geolocation is not supported by your browser.');
+      return;
+    }
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        // Reverse geocode to get place name
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+            { headers: { 'User-Agent': 'TNTrafficIntel/1.0' } }
+          );
+          const data = await res.json();
+          const name = data.display_name?.split(',')[0] || 'My Location';
+          const loc: GeoLocation = { lat: latitude, lng: longitude, name, displayName: data.display_name?.split(',').slice(0, 3).join(', ') || 'Current Location' };
+          setFromLocation(loc);
+          setFromSearch(name);
+        } catch {
+          const loc: GeoLocation = { lat: latitude, lng: longitude, name: 'My Location', displayName: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}` };
+          setFromLocation(loc);
+          setFromSearch('My Location');
+        }
+        setGeoLoading(false);
+      },
+      (err) => {
+        setRouteError('Could not detect location. Please allow location access.');
+        setGeoLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, []);
+
+  // Search for real routes
   const searchRoutes = useCallback(async () => {
-    if (!fromLocation || !toLocation) return;
+    if (!fromLocation || !toLocation) {
+      setRouteError('Please select both From and To locations.');
+      return;
+    }
     
     setRouteLoading(true);
     setRouteError('');
@@ -248,7 +295,7 @@ export default function SafetyPanel({ onRoutesFound }: SafetyPanelProps) {
         return;
       }
 
-      const results: RealRouteResult[] = routes.map((route, idx) => ({
+      const results: RealRouteResult[] = routes.map((route) => ({
         route,
         safetyScore: generateRouteSafetyScore(route),
         isSafest: false,
@@ -260,14 +307,16 @@ export default function SafetyPanel({ onRoutesFound }: SafetyPanelProps) {
 
       setRouteResults(results);
 
-      // Send routes to map
-      const routeColors = ['#22c55e', '#3b82f6', '#a855f7', '#f97316'];
-      const activeRoutes: ActiveRoute[] = results.map((r, idx) => ({
-        path: r.route.path,
-        color: r.isSafest ? '#22c55e' : routeColors[idx + 1] ?? '#64748b',
-        label: `${r.route.distance} km · ${r.route.duration} min · Safety: ${r.safetyScore}`,
-        isSafest: r.isSafest,
-      }));
+      // Send routes to map with risk-based colors
+      const activeRoutes: ActiveRoute[] = results.map((r) => {
+        const cat = getRouteCategory(r.safetyScore);
+        return {
+          path: r.route.path,
+          color: r.safetyScore >= 70 ? '#22c55e' : r.safetyScore >= 50 ? '#eab308' : '#ef4444',
+          label: `${r.route.distance} km · ${r.route.duration} min · Safety: ${r.safetyScore} (${cat.label})`,
+          isSafest: r.isSafest,
+        };
+      });
 
       onRoutesFound?.(activeRoutes, {
         from: { lat: fromLocation.lat, lng: fromLocation.lng, name: fromLocation.name },
@@ -279,13 +328,6 @@ export default function SafetyPanel({ onRoutesFound }: SafetyPanelProps) {
       setRouteLoading(false);
     }
   }, [fromLocation, toLocation, onRoutesFound]);
-
-  // Auto-search when both locations selected
-  useEffect(() => {
-    if (fromLocation && toLocation) {
-      searchRoutes();
-    }
-  }, [fromLocation, toLocation, searchRoutes]);
 
   // Clear routes when leaving route tab
   useEffect(() => {
@@ -457,34 +499,89 @@ export default function SafetyPanel({ onRoutesFound }: SafetyPanelProps) {
             <motion.div key="route" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-3">
               <div className="panel p-3">
                 <div className="text-xs font-bold text-foreground mb-1">🧭 Find Safest Route</div>
-                <div className="text-[10px] text-muted-foreground mb-3">Search any place in Tamil Nadu — real routes shown on map.</div>
+                <div className="text-[10px] text-muted-foreground mb-3">Search any place in Tamil Nadu — real routes with safety scores.</div>
+                
                 <div className="flex flex-col gap-2">
-                  <LocationSearchInput
-                    value={fromSearch}
-                    onChange={setFromSearch}
-                    onSelect={setFromLocation}
-                    placeholder="e.g. Paavai College, T.Nagar, Madurai..."
-                    label="From"
-                  />
+                  {/* From input with GPS button */}
+                  <div className="flex gap-1.5 items-end">
+                    <div className="flex-1">
+                      <LocationSearchInput
+                        value={fromSearch}
+                        onChange={(v) => { setFromSearch(v); setFromLocation(null); }}
+                        onSelect={setFromLocation}
+                        placeholder="e.g. Paavai College, T.Nagar..."
+                        label="From"
+                      />
+                    </div>
+                    <button
+                      onClick={detectLiveLocation}
+                      disabled={geoLoading}
+                      className="p-2 bg-primary/15 text-primary rounded-lg hover:bg-primary/25 transition-colors shrink-0 mb-[1px]"
+                      title="Use my current location"
+                    >
+                      {geoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LocateFixed className="w-4 h-4" />}
+                    </button>
+                  </div>
+
                   <LocationSearchInput
                     value={toSearch}
-                    onChange={setToSearch}
+                    onChange={(v) => { setToSearch(v); setToLocation(null); }}
                     onSelect={setToLocation}
                     placeholder="e.g. Pachal, Coimbatore, Salem..."
                     label="To"
                   />
                 </div>
-                {fromLocation && toLocation && (
-                  <button
-                    onClick={searchRoutes}
-                    disabled={routeLoading}
-                    className="w-full mt-3 py-2 bg-primary/20 text-primary font-bold text-xs rounded-lg hover:bg-primary/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {routeLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Navigation className="w-3.5 h-3.5" />}
-                    {routeLoading ? 'Finding Routes...' : 'Search Routes'}
-                  </button>
+
+                {/* Always visible search button */}
+                <button
+                  onClick={searchRoutes}
+                  disabled={routeLoading || !fromLocation || !toLocation}
+                  className="w-full mt-3 py-2.5 bg-primary text-primary-foreground font-bold text-xs rounded-lg hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {routeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
+                  {routeLoading ? 'Finding Routes...' : '🔍 Search Routes'}
+                </button>
+
+                {!fromLocation && fromSearch.length > 0 && (
+                  <div className="text-[9px] text-accent mt-1">↑ Select a location from the dropdown suggestions</div>
+                )}
+                {!toLocation && toSearch.length > 0 && (
+                  <div className="text-[9px] text-accent mt-1">↑ Select a destination from the dropdown suggestions</div>
                 )}
               </div>
+
+              {/* Quick place suggestions */}
+              {!routeResults.length && !routeLoading && (
+                <div className="panel p-3">
+                  <div className="text-[10px] text-muted-foreground mb-2">Quick picks — tap to fill:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { from: 'Chennai Central', to: 'Coimbatore' },
+                      { from: 'Madurai', to: 'Trichy' },
+                      { from: 'Salem', to: 'Namakkal' },
+                      { from: 'Ooty', to: 'Mysore' },
+                    ].map((pair, idx) => (
+                      <button
+                        key={idx}
+                        onClick={async () => {
+                          setFromSearch(pair.from);
+                          setToSearch(pair.to);
+                          // Auto-geocode both
+                          const [fromResults, toResults] = await Promise.all([
+                            geocodeLocation(pair.from),
+                            geocodeLocation(pair.to),
+                          ]);
+                          if (fromResults[0]) { setFromLocation(fromResults[0]); setFromSearch(fromResults[0].name); }
+                          if (toResults[0]) { setToLocation(toResults[0]); setToSearch(toResults[0].name); }
+                        }}
+                        className="text-[9px] bg-secondary/60 text-foreground px-2 py-1.5 rounded-lg hover:bg-secondary transition-colors"
+                      >
+                        {pair.from} → {pair.to}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Route loading */}
               {routeLoading && (
@@ -497,64 +594,62 @@ export default function SafetyPanel({ onRoutesFound }: SafetyPanelProps) {
               {/* Route error */}
               {routeError && (
                 <div className="panel p-4 text-center border-destructive/30">
-                  <div className="text-2xl mb-1">🔍</div>
-                  <div className="text-xs text-muted-foreground">{routeError}</div>
+                  <div className="text-2xl mb-1">⚠️</div>
+                  <div className="text-xs text-destructive">{routeError}</div>
                 </div>
               )}
 
-              {/* No location selected */}
-              {!fromLocation && !toLocation && !routeLoading && (
-                <div className="panel p-4 text-center">
-                  <div className="text-2xl mb-2">🗺️</div>
-                  <div className="text-xs font-bold text-foreground mb-1">Search Any Location</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    Type any place name — colleges, villages, bus stops, temples, anything in Tamil Nadu. Real routes will be shown on the map.
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-1 justify-center">
-                    {['Paavai College', 'Pachal', 'Marina Beach', 'Ooty', 'Rameswaram'].map(place => (
-                      <button
-                        key={place}
-                        onClick={() => {
-                          if (!fromSearch) setFromSearch(place);
-                          else setToSearch(place);
-                        }}
-                        className="text-[9px] bg-primary/10 text-primary px-2 py-1 rounded-full hover:bg-primary/20 transition-colors"
-                      >
-                        {place}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Route results */}
-              {routeResults.map((result, i) => (
-                <div key={i} className={`panel p-3 ${result.isSafest ? 'border-success/40 bg-success/5' : ''}`}>
-                  {result.isSafest && (
-                    <div className="text-[9px] font-bold text-success uppercase tracking-widest mb-1">✅ Safest Route</div>
-                  )}
-                  <div className="flex items-center gap-2 mb-2">
-                    <SafetyGauge score={result.safetyScore} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[11px] font-bold text-foreground">
-                        {fromLocation?.name} → {toLocation?.name}
-                      </div>
-                      <div className="text-[9px] text-muted-foreground">
-                        {result.route.distance} km · ~{result.route.duration} min
-                        {result.route.summary && ` · via ${result.route.summary}`}
+              {/* Route results with categories */}
+              {routeResults.map((result, i) => {
+                const category = getRouteCategory(result.safetyScore);
+                return (
+                  <div key={i} className={`panel p-3 border ${category.bgColor}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-[9px] font-bold uppercase tracking-widest ${category.color}`}>
+                        {category.emoji} {category.label} ROUTE
+                      </span>
+                      <span className="text-[9px] text-muted-foreground">Route {i + 1}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <SafetyGauge score={result.safetyScore} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] font-bold text-foreground">
+                          {fromLocation?.name} → {toLocation?.name}
+                        </div>
+                        <div className="text-[9px] text-muted-foreground">
+                          📏 {result.route.distance} km · ⏱ ~{result.route.duration} min
+                          {result.route.summary && ` · via ${result.route.summary}`}
+                        </div>
                       </div>
                     </div>
+                    <div className="flex gap-2 text-[9px] flex-wrap">
+                      <span className={`px-1.5 py-0.5 rounded-full ${result.safetyScore >= 70 ? 'bg-success/20 congestion-low' : result.safetyScore >= 50 ? 'bg-accent/20 congestion-medium' : 'bg-destructive/20 congestion-high'}`}>
+                        Safety: {result.safetyScore}/100
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                        {result.route.distance < 10 ? '🏘️ Short' : result.route.distance < 50 ? '🛣️ Medium' : '🏔️ Long'} distance
+                      </span>
+                      {result.isSafest && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-success/20 congestion-low">
+                          🛡️ Recommended
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex gap-2 text-[9px]">
-                    <span className={`px-1.5 py-0.5 rounded-full ${result.safetyScore >= 70 ? 'bg-success/20 congestion-low' : result.safetyScore >= 50 ? 'bg-accent/20 congestion-medium' : 'bg-destructive/20 congestion-high'}`}>
-                      Safety: {result.safetyScore}/100
-                    </span>
-                    <span className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
-                      {result.isSafest ? '🛡️ Recommended' : `Route ${i + 1}`}
-                    </span>
+                );
+              })}
+
+              {/* Legend */}
+              {routeResults.length > 0 && (
+                <div className="panel p-2.5">
+                  <div className="text-[9px] text-muted-foreground mb-1.5 uppercase tracking-wider">Route Categories</div>
+                  <div className="flex gap-3 text-[9px]">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-success" /> Safest (70+)</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-accent" /> Moderate (50-69)</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-destructive" /> Risky (&lt;50)</span>
                   </div>
                 </div>
-              ))}
+              )}
             </motion.div>
           )}
 
