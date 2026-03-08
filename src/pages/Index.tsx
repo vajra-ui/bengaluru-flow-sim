@@ -205,7 +205,7 @@ function DashboardContent() {
                 {view === 'commuter' && <CommuterPanel />}
                 {view === 'operator' && <OperatorPanel />}
                 {view === 'authority' && <AuthorityPanel />}
-                {view === 'safety' && <SafetyPanel />}
+                {view === 'safety' && <SafetyPanel onRoutesFound={handleRoutesFound} />}
               </motion.div>
             )}
           </AnimatePresence>
