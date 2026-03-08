@@ -36,10 +36,10 @@ export default function Login() {
           <div className="flex items-center justify-center gap-2 mb-2">
             <Activity className="w-6 h-6 text-primary" />
             <h1 className="font-mono text-lg font-bold tracking-wider text-foreground glow-text">
-              SAFETY DOST
+              TN TRAFFIC INTEL
             </h1>
           </div>
-          <p className="text-xs text-muted-foreground font-mono">YOUR GUARDIAN FRIEND</p>
+          <p className="text-xs text-muted-foreground font-mono">TAMIL NADU TRAFFIC INTELLIGENCE</p>
         </div>
 
         {/* Role selector */}

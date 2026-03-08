@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, AlertTriangle, MapPin, Phone, Star, Navigation, Eye, Siren, ChevronDown, ChevronUp, Send, Users, Lightbulb, Camera, Clock } from 'lucide-react';
-import { allSegments, allNodes } from '@/lib/india-roads';
+import { allSegments, allNodes } from '@/lib/tamilnadu-roads';
 import { useTraffic } from '@/hooks/useTraffic';
 import {
   getSegmentSafetyScore, getAllSafetyScores, getRecentIncidents, getMockRatings,
@@ -108,11 +108,11 @@ type SafetyTab = 'overview' | 'route' | 'incidents' | 'emergency';
 
 export default function SafetyPanel() {
   const [tab, setTab] = useState<SafetyTab>('overview');
-  const [selectedSeg, setSelectedSeg] = useState<string>('orr-silk-mara');
-  const [fromSearch, setFromSearch] = useState('Majestic');
-  const [toSearch, setToSearch] = useState('Whitefield');
-  const [fromNode, setFromNode] = useState('majestic');
-  const [toNode, setToNode] = useState('whitefield');
+  const [selectedSeg, setSelectedSeg] = useState<string>('che-egmore-tnagar');
+  const [fromSearch, setFromSearch] = useState('Chennai Central');
+  const [toSearch, setToSearch] = useState('T. Nagar');
+  const [fromNode, setFromNode] = useState('chennai-central');
+  const [toNode, setToNode] = useState('chennai-tnagar');
   const [showFromSuggestions, setShowFromSuggestions] = useState(false);
   const [showToSuggestions, setShowToSuggestions] = useState(false);
   const [liveTracking, setLiveTracking] = useState(false);

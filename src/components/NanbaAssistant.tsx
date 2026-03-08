@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, X, Volume2 } from 'lucide-react';
 import { useTraffic } from '@/hooks/useTraffic';
-import { allSegments } from '@/lib/india-roads';
+import { allSegments } from '@/lib/tamilnadu-roads';
 import { getSegmentSafetyScore, getTransportModes, emergencyContacts, getRecentIncidents } from '@/lib/safety-engine';
 
 type AssistantState = 'idle' | 'listening' | 'processing' | 'speaking';
@@ -66,7 +66,7 @@ export default function NanbaAssistant() {
   const [transcript, setTranscript] = useState('');
   const [response, setResponse] = useState('');
   const [showPanel, setShowPanel] = useState(false);
-  const [userSegment, setUserSegment] = useState<string>('orr-silk-mara');
+  const [userSegment, setUserSegment] = useState<string>('che-egmore-tnagar');
   const { states, predictCongestion } = useTraffic();
   const recognitionRef = useRef<any>(null);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -248,7 +248,7 @@ export default function NanbaAssistant() {
         return `Nanba, your current route ${segName} has a safety score of ${safety.overall}. The safest route in the city right now is ${safest.s.name} with a score of ${safest.score.overall}. I always recommend choosing well-lit routes with police presence over shorter alternatives. You can check the Safety tab for detailed route comparisons.`;
       }
       case 'emergency': {
-        return `Nanba, I'm here for you. For emergencies, dial the Women's Helpline at 181, or Police at 100. The Bengaluru City Police can be reached at 080-22942222. You can also use the SOS button in the Safety tab to share your live location with emergency contacts immediately. Stay calm, I am with you.`;
+        return `Nanba, I'm here for you. For emergencies, dial the Women's Helpline at 181, or Police at 100. The TN Police Control Room can be reached at 044-28447777. You can also use Kavalan SOS App by calling 1091. Stay calm, I am with you.`;
       }
       case 'transport': {
         const modes = getTransportModes(segId);

@@ -1,5 +1,5 @@
 import { useTraffic } from '@/hooks/useTraffic';
-import { allSensors } from '@/lib/india-roads';
+import { allSensors } from '@/lib/tamilnadu-roads';
 import { motion } from 'framer-motion';
 import { useState, useMemo } from 'react';
 import { Wifi, WifiOff, Activity } from 'lucide-react';

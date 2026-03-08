@@ -1,5 +1,5 @@
 import { type SegmentState } from './traffic-engine';
-import { allSegments, getAllConnectedSegments } from './india-roads';
+import { allSegments, getAllConnectedSegments } from './tamilnadu-roads';
 
 export interface TrafficAlert {
   id: string;
@@ -29,35 +29,26 @@ export function generateAlerts(states: Map<string, SegmentState>): TrafficAlert[
     const state = states.get(seg.id);
     if (!state) continue;
 
-    // Density rising alert
     if (state.trend === 'rising' && state.congestionLevel > 0.6) {
       alerts.push({
-        id: `density-${seg.id}`,
-        type: 'density_rising',
+        id: `density-${seg.id}`, type: 'density_rising',
         severity: state.congestionLevel > 0.8 ? 'critical' : 'warning',
         title: 'Road density increasing',
         description: `${seg.name} at ${Math.round(state.congestionLevel * 100)}% — trend rising`,
-        segmentId: seg.id,
-        segmentName: seg.name,
-        timestamp: now,
+        segmentId: seg.id, segmentName: seg.name, timestamp: now,
       });
     }
 
-    // Queue saturation
     if (state.queueLength > seg.capacity * 0.6) {
       alerts.push({
-        id: `queue-${seg.id}`,
-        type: 'queue_saturation',
+        id: `queue-${seg.id}`, type: 'queue_saturation',
         severity: state.queueLength > seg.capacity * 0.8 ? 'critical' : 'warning',
         title: 'Queue saturation risk',
         description: `${state.queueLength} vehicles queued on ${seg.name} (capacity: ${seg.capacity})`,
-        segmentId: seg.id,
-        segmentName: seg.name,
-        timestamp: now,
+        segmentId: seg.id, segmentName: seg.name, timestamp: now,
       });
     }
 
-    // Gridlock propagation
     if (state.congestionLevel > 0.75) {
       const connected = getAllConnectedSegments(seg.id);
       const congestedNeighbors = connected.filter(cId => {
@@ -66,29 +57,20 @@ export function generateAlerts(states: Map<string, SegmentState>): TrafficAlert[
       });
       if (congestedNeighbors.length >= 2) {
         alerts.push({
-          id: `gridlock-${seg.id}`,
-          type: 'gridlock_risk',
-          severity: 'critical',
+          id: `gridlock-${seg.id}`, type: 'gridlock_risk', severity: 'critical',
           title: 'Gridlock propagation possible',
           description: `${seg.name} and ${congestedNeighbors.length} connected corridors congested`,
-          segmentId: seg.id,
-          segmentName: seg.name,
-          timestamp: now,
+          segmentId: seg.id, segmentName: seg.name, timestamp: now,
         });
       }
     }
 
-    // Spillover detection
     if (state.congestionLevel > 0.7 && state.inflowRate > state.outflowRate * 1.3) {
       alerts.push({
-        id: `spillover-${seg.id}`,
-        type: 'spillover',
-        severity: 'warning',
+        id: `spillover-${seg.id}`, type: 'spillover', severity: 'warning',
         title: 'Alternative corridor needs clearing',
         description: `Inflow exceeds outflow on ${seg.name} — spillover imminent`,
-        segmentId: seg.id,
-        segmentName: seg.name,
-        timestamp: now,
+        segmentId: seg.id, segmentName: seg.name, timestamp: now,
       });
     }
   }
@@ -100,7 +82,6 @@ export function generateRegulations(states: Map<string, SegmentState>): Regulati
   const actions: RegulationAction[] = [];
   let priority = 1;
 
-  // Find worst segments
   const ranked = allSegments
     .map(seg => ({ seg, state: states.get(seg.id)! }))
     .filter(s => s.state)
@@ -109,17 +90,14 @@ export function generateRegulations(states: Map<string, SegmentState>): Regulati
   for (const { seg, state } of ranked.slice(0, 5)) {
     if (state.congestionLevel < 0.6) break;
 
-    // Stop inflow on worst segment
     actions.push({
-      id: `stop-${seg.id}`,
-      priority: priority++,
+      id: `stop-${seg.id}`, priority: priority++,
       action: `Stop inflow from feeder roads`,
       target: seg.name,
       reason: `${Math.round(state.congestionLevel * 100)}% congested, queue: ${state.queueLength}`,
       type: 'stop_inflow',
     });
 
-    // Find best alternate
     const connected = getAllConnectedSegments(seg.id);
     const bestAlt = connected
       .map(cId => ({ id: cId, state: states.get(cId) }))
@@ -129,8 +107,7 @@ export function generateRegulations(states: Map<string, SegmentState>): Regulati
     if (bestAlt) {
       const altSeg = allSegments.find(s => s.id === bestAlt.id);
       actions.push({
-        id: `clear-${bestAlt.id}`,
-        priority: priority++,
+        id: `clear-${bestAlt.id}`, priority: priority++,
         action: `Clear and prioritize alternate corridor`,
         target: altSeg?.name ?? bestAlt.id,
         reason: `Only ${Math.round((bestAlt.state?.congestionLevel ?? 0) * 100)}% utilized — can absorb diverted traffic`,
@@ -139,23 +116,20 @@ export function generateRegulations(states: Map<string, SegmentState>): Regulati
     }
   }
 
-  // Zone coordination if many hotspots
   const hotspotCount = ranked.filter(r => r.state.congestionLevel > 0.7).length;
   if (hotspotCount >= 3) {
     actions.push({
-      id: 'coordinate-zone',
-      priority: priority++,
+      id: 'coordinate-zone', priority: priority++,
       action: 'Coordinate neighboring zone officers',
       target: 'Multi-zone',
-      reason: `${hotspotCount} hotspots active — risk of N-S / E-W corridor lock`,
+      reason: `${hotspotCount} hotspots active — risk of corridor lock`,
       type: 'coordinate_zone',
     });
   }
 
   if (hotspotCount >= 5) {
     actions.push({
-      id: 'deploy-officers',
-      priority: priority++,
+      id: 'deploy-officers', priority: priority++,
       action: 'Deploy additional traffic officers',
       target: ranked[0].seg.name,
       reason: `Critical congestion across ${hotspotCount} corridors`,

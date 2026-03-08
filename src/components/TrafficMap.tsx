@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useTraffic } from '@/hooks/useTraffic';
 import { getAllSafetyScores, getSegmentSafetyScore, safetyColor } from '@/lib/safety-engine';
-import { allSegments } from '@/lib/india-roads';
+import { allSegments } from '@/lib/tamilnadu-roads';
 
 function congestionColor(level: number): string {
   if (level < 0.3) return '#22c55e';
@@ -87,8 +87,8 @@ export default function TrafficMap({ onSegmentClick, className, viewMode }: Traf
     if (!containerRef.current || mapRef.current) return;
 
     const map = L.map(containerRef.current, {
-      center: [22.5, 78.5], // Center of India
-      zoom: 5,
+      center: [11.0, 78.5], // Center of Tamil Nadu
+      zoom: 7,
       zoomControl: false,
       attributionControl: false,
     });

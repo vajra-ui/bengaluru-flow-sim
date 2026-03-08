@@ -1,4 +1,4 @@
-import { allSegments } from './india-roads';
+import { allSegments } from './tamilnadu-roads';
 
 export interface TrafficOfficer {
   id: string;
@@ -12,65 +12,62 @@ export interface TrafficOfficer {
   avatar: string;
 }
 
-// Mock officers assigned to Bengaluru zones
+// Tamil Nadu traffic police officers
 export const officers: TrafficOfficer[] = [
   {
-    id: 'off-1', name: 'Rajesh Kumar', badge: 'BTP-1042', phone: '+91 98450 12345',
-    rank: 'Inspector', zone: 'Silk Board – ORR South',
-    assignedSegments: ['orr-silk-mara', 'hosur-silk-ec', 'koram-silk'],
+    id: 'off-1', name: 'Rajesh Kannan', badge: 'TNTP-1042', phone: '+91 98450 12345',
+    rank: 'Inspector', zone: 'Anna Salai – T.Nagar',
+    assignedSegments: ['che-egmore-tnagar', 'che-tnagar-guindy', 'che-central-egmore'],
     status: 'on-duty', avatar: '👮',
   },
   {
-    id: 'off-2', name: 'Priya Sharma', badge: 'BTP-2087', phone: '+91 98451 23456',
-    rank: 'Sub-Inspector', zone: 'Marathahalli – KR Puram',
-    assignedSegments: ['orr-mara-krp', 'ind-mara', 'mara-whitefield'],
+    id: 'off-2', name: 'Priya Lakshmi', badge: 'TNTP-2087', phone: '+91 98451 23456',
+    rank: 'Sub-Inspector', zone: 'OMR – Velachery',
+    assignedSegments: ['che-velachery-omr', 'che-omr-sholinganallur', 'che-perungudi-omr'],
     status: 'on-duty', avatar: '👮‍♀️',
   },
   {
-    id: 'off-3', name: 'Mohammed Fazil', badge: 'BTP-3156', phone: '+91 98452 34567',
-    rank: 'Inspector', zone: 'MG Road – Indiranagar',
-    assignedSegments: ['mg-majestic-ind', 'majestic-mg', 'majestic-raja'],
+    id: 'off-3', name: 'Mohammed Irfan', badge: 'TNTP-3156', phone: '+91 98452 34567',
+    rank: 'Inspector', zone: 'Guindy – Chromepet',
+    assignedSegments: ['che-guindy-chromepet', 'che-chromepet-tambaram', 'che-porur-guindy'],
     status: 'responding', avatar: '👮',
   },
   {
-    id: 'off-4', name: 'Lakshmi Devi', badge: 'BTP-4203', phone: '+91 98453 45678',
-    rank: 'Head Constable', zone: 'Hebbal – Yelahanka',
-    assignedSegments: ['bell-road', 'hebbal-yelahanka', 'hebbal-orrn'],
+    id: 'off-4', name: 'Kavitha Devi', badge: 'TNTP-4203', phone: '+91 98453 45678',
+    rank: 'Head Constable', zone: 'Anna Nagar – Ambattur',
+    assignedSegments: ['che-central-anna-nagar', 'che-anna-nagar-ambattur', 'che-ambattur-avadi'],
     status: 'on-duty', avatar: '👮‍♀️',
   },
   {
-    id: 'off-5', name: 'Suresh Babu', badge: 'BTP-5078', phone: '+91 98454 56789',
-    rank: 'Sub-Inspector', zone: 'Bellandur – Sarjapur',
-    assignedSegments: ['bell-sarj', 'hsr-sarjapur', 'btm-hsr'],
+    id: 'off-5', name: 'Suresh Kumar', badge: 'CBTP-5078', phone: '+91 98454 56789',
+    rank: 'Sub-Inspector', zone: 'Coimbatore – Gandhipuram',
+    assignedSegments: ['cbe-jn-gandhi', 'cbe-gandhi-peela', 'cbe-gandhi-sarava'],
     status: 'on-duty', avatar: '👮',
   },
   {
-    id: 'off-6', name: 'Anita Rao', badge: 'BTP-6134', phone: '+91 98455 67890',
-    rank: 'Constable', zone: 'Jayanagar – Banashankari',
-    assignedSegments: ['jayanagar-bana', 'majestic-jaya', 'koram-btm'],
+    id: 'off-6', name: 'Anitha Rani', badge: 'MDTP-6134', phone: '+91 98455 67890',
+    rank: 'Constable', zone: 'Madurai – Meenakshi',
+    assignedSegments: ['mdu-meena-periyar', 'mdu-meena-thiru', 'mdu-periyar-anna'],
     status: 'off-duty', avatar: '👮‍♀️',
   },
   {
-    id: 'off-7', name: 'Venkatesh Murthy', badge: 'BTP-7211', phone: '+91 98456 78901',
-    rank: 'Inspector', zone: 'ORR North – KR Puram',
-    assignedSegments: ['orr-n-krp', 'raja-yeshwanth'],
+    id: 'off-7', name: 'Venkatesh Iyer', badge: 'TNTP-7211', phone: '+91 98456 78901',
+    rank: 'Inspector', zone: 'NH44 – Hosur–Salem',
+    assignedSegments: ['nh44-hosur-krishi', 'nh44-krishi-salem', 'nh48-che-hosur'],
     status: 'on-duty', avatar: '👮',
   },
 ];
 
-/** Get officers assigned to a segment */
 export function getOfficersForSegment(segmentId: string): TrafficOfficer[] {
   return officers.filter(o => o.assignedSegments.includes(segmentId));
 }
 
-/** Get the segment detail with officer info */
 export function getSegmentOfficerInfo(segmentId: string) {
   const seg = allSegments.find(s => s.id === segmentId);
   const assignedOfficers = getOfficersForSegment(segmentId);
   return { segment: seg, officers: assignedOfficers };
 }
 
-/** Preventive actions for moderate traffic */
 export interface PreventiveAction {
   condition: string;
   action: string;

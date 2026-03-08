@@ -1,6 +1,6 @@
 import { createContext, useContext, useRef, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { TrafficEngine, type SegmentState, type SensorReading } from '@/lib/traffic-engine';
-import { allSegments } from '@/lib/india-roads';
+import { allSegments } from '@/lib/tamilnadu-roads';
 
 export interface CommuterNotification {
   id: string;
